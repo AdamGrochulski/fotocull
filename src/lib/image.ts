@@ -10,3 +10,13 @@ export async function loadImageUrl(path: string): Promise<string> {
   const blob = new Blob([bytes], { type: "image/jpeg" });
   return URL.createObjectURL(blob);
 }
+
+/**
+ * Load a small JPEG thumbnail (decoded + downscaled in Rust) as an object URL.
+ * Used by the filmstrip. Caller owns the URL (revoke when done).
+ */
+export async function loadThumbnailUrl(path: string, maxSide = 200): Promise<string> {
+  const bytes = await invoke<ArrayBuffer>("read_thumbnail", { path, maxSide });
+  const blob = new Blob([bytes], { type: "image/jpeg" });
+  return URL.createObjectURL(blob);
+}

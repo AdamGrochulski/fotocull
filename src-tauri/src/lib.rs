@@ -26,6 +26,7 @@ pub fn run() {
             manifest::renamed_targets,
             manifest::filter_by_manifest,
             image::read_image,
+            image::read_thumbnail,
             copy::copy_accepted,
             analyze::analyze_image,
             exif::read_exif

@@ -92,6 +92,8 @@ interface AppState {
   decideCurrent: (kind: DecisionKind, opts: { includeArw: boolean; newName: string }) => void;
   /** Step back to the previous photo (to change a decision). */
   reviewPrev: () => void;
+  /** Jump to a specific photo index (from the filmstrip). */
+  goToReview: (index: number) => void;
   /** Return from review to the scan-result screen. */
   backToResult: () => void;
 
@@ -389,6 +391,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setReviewIndex((i) => Math.max(0, i - 1));
   }
 
+  function goToReview(index: number) {
+    setReviewIndex(Math.max(0, Math.min(index, photos.length)));
+  }
+
   function backToResult() {
     setPhase("scanned");
   }
@@ -418,6 +424,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     startReview,
     decideCurrent,
     reviewPrev,
+    goToReview,
     backToResult,
     copyStage,
     copyProgress,

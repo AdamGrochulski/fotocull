@@ -6,12 +6,16 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useAppState } from "../state/appStore";
-import { loadImageUrl } from "../lib/image";
+import { loadImageUrl, loadThumbnailUrl } from "../lib/image";
 import { analyzeImage, type ImageAnalysis } from "../lib/analyze";
 import { readExif, type ExifInfo } from "../lib/exif";
 import { PhotoViewer, type PhotoViewerHandle } from "./PhotoViewer";
 import type { Photo } from "../types/photo";
 import "./ReviewScreen.css";
+
+/** Thumbnail object-URL cache, keyed by JPG path. Thumbnails are tiny and reused
+ * as the filmstrip window slides, so they're kept for the app's lifetime. */
+const thumbCache = new Map<string, string>();
 
 export function ReviewScreen() {
   const { photos, reviewIndex } = useAppState();
@@ -236,6 +240,8 @@ function ReviewCard({ photo }: { photo: Photo }) {
           </div>
         </div>
       )}
+
+      <Filmstrip />
 
       <div className="review-meta">
         <span className="review-name">{photo.baseName}</span>
@@ -503,6 +509,69 @@ function RenameField({
         </ul>
       )}
     </div>
+  );
+}
+
+/** Filmstrip of recently reviewed frames — compare bursts, jump back to any. */
+function Filmstrip() {
+  const { photos, reviewIndex, goToReview } = useAppState();
+
+  const items: number[] = [];
+  for (let i = Math.max(0, reviewIndex - 12); i < reviewIndex; i++) {
+    if (photos[i]?.jpgPath) items.push(i);
+  }
+  if (items.length === 0) return null;
+
+  return (
+    <div className="review-strip" role="list" aria-label="Recently reviewed">
+      {items.map((i) => (
+        <Thumb key={i} index={i} onPick={() => goToReview(i)} />
+      ))}
+    </div>
+  );
+}
+
+function Thumb({ index, onPick }: { index: number; onPick: () => void }) {
+  const { photos, decisions } = useAppState();
+  const photo = photos[index];
+  const path = photo?.jpgPath;
+  const [url, setUrl] = useState<string | null>(
+    path ? (thumbCache.get(path) ?? null) : null,
+  );
+
+  useEffect(() => {
+    if (!path || url) return;
+    let cancelled = false;
+    loadThumbnailUrl(path, 200)
+      .then((u) => {
+        thumbCache.set(path, u);
+        if (!cancelled) setUrl(u);
+        else URL.revokeObjectURL(u); // lost the race; another mount cached it
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [path, url]);
+
+  const d = decisions[index];
+  const tone =
+    d?.kind === "accept" ? "is-accept" : d?.kind === "reject" ? "is-reject" : "";
+
+  return (
+    <button
+      className={`review-thumb ${tone}`}
+      role="listitem"
+      onClick={onPick}
+      title={`#${index + 1} ${photo?.baseName ?? ""}`}
+    >
+      {url ? (
+        <img src={url} alt={photo?.baseName ?? ""} draggable={false} />
+      ) : (
+        <span className="review-thumb__ph" />
+      )}
+      <span className="review-thumb__no">{index + 1}</span>
+    </button>
   );
 }
 
