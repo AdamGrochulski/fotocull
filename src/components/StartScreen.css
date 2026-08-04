@@ -119,6 +119,13 @@
   color: #d1433f;
 }
 
+.start-screen__error {
+  color: #d1433f;
+  font-size: 0.9rem;
+  max-width: 720px;
+  word-break: break-word;
+}
+
 .start-screen__proceed {
   border: none;
   border-radius: 10px;

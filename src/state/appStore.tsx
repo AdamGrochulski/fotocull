@@ -7,7 +7,9 @@ import {
 } from "react";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import { checkDir, pickDirectory } from "../lib/fs";
+import { scanSource, onScanProgress, type ScanProgress } from "../lib/scan";
 import type { DirStatus, FolderRole } from "../types/fs";
+import type { Photo } from "../types/photo";
 
 const SETTINGS_FILE = "settings.json";
 const KEY_SOURCE = "sourceDir";
@@ -23,6 +25,9 @@ export function isDestValid(s: DirStatus | null): boolean {
   return !!s && s.exists && s.isDir && s.writable;
 }
 
+/** Faza aplikacji. */
+export type Phase = "setup" | "scanning" | "scanned";
+
 interface AppState {
   sourceDir: string | null;
   destDir: string | null;
@@ -34,6 +39,16 @@ interface AppState {
   selectFolder: (role: FolderRole) => Promise<void>;
   /** Oba foldery wybrane i poprawne. */
   canProceed: boolean;
+
+  // --- skan (Etap 2) ---
+  phase: Phase;
+  photos: Photo[];
+  scanProgress: ScanProgress | null;
+  scanError: string | null;
+  /** Uruchom skan folderu źródłowego. */
+  startScan: () => Promise<void>;
+  /** Wróć do ekranu wyboru folderów. */
+  resetToSetup: () => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -45,6 +60,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sourceStatus, setSourceStatus] = useState<DirStatus | null>(null);
   const [destStatus, setDestStatus] = useState<DirStatus | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [phase, setPhase] = useState<Phase>("setup");
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   // Start: wczytaj zapamiętane ścieżki i zwaliduj je ponownie (mogły zniknąć).
   useEffect(() => {
@@ -97,6 +117,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function startScan() {
+    if (!sourceDir) return;
+    setPhase("scanning");
+    setScanError(null);
+    setScanProgress(null);
+    setPhotos([]);
+
+    const unlisten = await onScanProgress(setScanProgress);
+    try {
+      const found = await scanSource(sourceDir);
+      setPhotos(found);
+      setPhase("scanned");
+    } catch (err) {
+      setScanError(String(err));
+      setPhase("setup");
+    } finally {
+      unlisten();
+    }
+  }
+
+  function resetToSetup() {
+    setPhase("setup");
+    setScanProgress(null);
+    setScanError(null);
+  }
+
   const canProceed = isSourceValid(sourceStatus) && isDestValid(destStatus);
 
   const value: AppState = {
@@ -107,6 +153,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loading,
     selectFolder,
     canProceed,
+    phase,
+    photos,
+    scanProgress,
+    scanError,
+    startScan,
+    resetToSetup,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

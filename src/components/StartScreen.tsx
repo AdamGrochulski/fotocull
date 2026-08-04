@@ -8,7 +8,7 @@ import "./StartScreen.css";
  * Skan nośnika (Etap 2) rusza dopiero po wybraniu obu poprawnych folderów.
  */
 export function StartScreen() {
-  const { loading, canProceed } = useAppState();
+  const { loading, canProceed, startScan, scanError } = useAppState();
 
   return (
     <div className="start-screen">
@@ -24,9 +24,12 @@ export function StartScreen() {
         <FolderCard role="dest" />
       </section>
 
+      {scanError && <div className="start-screen__error">Błąd skanu: {scanError}</div>}
+
       <button
         className="start-screen__proceed"
         disabled={!canProceed || loading}
+        onClick={startScan}
         title={
           canProceed
             ? "Skanuj nośnik"
