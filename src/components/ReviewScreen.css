@@ -96,6 +96,7 @@
    horizontally. Accept/reject shows as a coloured border. */
 .review-strip {
   display: flex;
+  justify-content: center;
   gap: var(--fc-s2);
   overflow-x: auto;
   padding: 2px 0;

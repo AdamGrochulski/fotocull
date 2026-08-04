@@ -575,7 +575,7 @@ function RenameField({
 }
 
 /** How many frames each side of the current one the filmstrip shows. */
-const STRIP_RADIUS = 4;
+const STRIP_RADIUS = 3;
 
 /** Filmstrip of nearby frames (previous and next). In single mode, click any to
  * jump to it without a decision (scrub a burst). In select mode, click to pick
@@ -586,9 +586,9 @@ function Filmstrip() {
     useAppState();
   const selecting = reviewMode === "select";
 
-  const radius = selecting ? STRIP_RADIUS * 2 : STRIP_RADIUS;
-  const start = Math.max(0, reviewIndex - radius);
-  const end = Math.min(photos.length - 1, reviewIndex + radius);
+  // Current frame in the middle, three each side.
+  const start = Math.max(0, reviewIndex - STRIP_RADIUS);
+  const end = Math.min(photos.length - 1, reviewIndex + STRIP_RADIUS);
   const items: number[] = [];
   for (let i = start; i <= end; i++) {
     if (photos[i]?.jpgPath) items.push(i);
