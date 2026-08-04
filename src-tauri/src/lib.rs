@@ -8,6 +8,12 @@ mod scan;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Never keep a user folder as the process working directory. On Windows a
+    // directory that is any process's CWD cannot be renamed or moved until that
+    // process exits — which would silently lock the destination folder while the
+    // app runs. Anchor to a neutral temp dir up front.
+    let _ = std::env::set_current_dir(std::env::temp_dir());
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())

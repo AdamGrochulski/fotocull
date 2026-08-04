@@ -34,6 +34,11 @@ fn probe_writable(dir: &Path) -> bool {
 /// Modifies nothing except a momentary write-test file (removed immediately).
 #[tauri::command]
 pub fn check_dir(path: String) -> DirStatus {
+    // Runs right after a folder is picked. Some native pickers change the process
+    // working directory to the chosen folder; re-anchor to a neutral temp dir so
+    // we never lock a user folder against rename (see run() in lib.rs).
+    let _ = std::env::set_current_dir(std::env::temp_dir());
+
     let p = Path::new(&path);
 
     let exists = p.exists();
