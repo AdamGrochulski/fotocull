@@ -80,7 +80,11 @@ export function ScanScreen() {
       </div>
 
       {photos.length === 0 ? (
-        <p className="scan-empty">No JPG/ARW files in the selected folder.</p>
+        <p className="scan-empty">
+          {filteredOut > 0
+            ? "Nothing new — every photo here was already copied in an earlier session."
+            : "No JPG/ARW files found in the selected folder."}
+        </p>
       ) : (
         <div className="scan-list">
           <table>
