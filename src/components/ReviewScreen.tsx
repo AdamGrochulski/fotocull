@@ -178,7 +178,17 @@ function ReviewCard({ photo }: { photo: Photo }) {
 }
 
 function ReviewComplete() {
-  const { photos, decisions, reviewPrev, backToResult } = useAppState();
+  const {
+    photos,
+    destDir,
+    decisions,
+    reviewPrev,
+    backToResult,
+    copyStage,
+    copyProgress,
+    copyReport,
+    runCopy,
+  } = useAppState();
 
   const accepted = decisions.filter((d) => d?.kind === "accept").length;
   const rejected = decisions.filter((d) => d?.kind === "reject").length;
@@ -197,18 +207,60 @@ function ReviewComplete() {
         <Stat label="Renamed" value={renamed} />
       </div>
 
-      <p className="review-note">
-        Nothing has been copied yet — copying accepted photos arrives in Stage 5.
-      </p>
+      {copyStage === "idle" && (
+        <>
+          <p className="review-note">
+            Accepted photos will be copied to <code>{destDir}</code> and recorded in
+            the manifest. The source is never touched.
+          </p>
+          <div className="review-done-actions">
+            <button className="fc-btn" onClick={reviewPrev}>
+              ← Back to last photo
+            </button>
+            <button
+              className="fc-btn fc-btn--primary"
+              onClick={runCopy}
+              disabled={accepted === 0}
+              title={accepted === 0 ? "Nothing accepted to copy" : "Copy accepted"}
+            >
+              Copy {accepted} accepted →
+            </button>
+          </div>
+        </>
+      )}
 
-      <div className="review-done-actions">
-        <button className="fc-btn" onClick={reviewPrev}>
-          ← Back to last photo
-        </button>
-        <button className="fc-btn" onClick={backToResult}>
-          Scan results
-        </button>
-      </div>
+      {copyStage === "copying" && (
+        <div className="review-copying">
+          <div className="scan-spinner" aria-hidden />
+          <span>
+            Copying {copyProgress?.done ?? 0} / {copyProgress?.total ?? accepted}…
+          </span>
+        </div>
+      )}
+
+      {copyStage === "done" && copyReport && (
+        <div className="review-report">
+          <p className="review-report__ok">
+            ✓ Copied {copyReport.copied} photo(s) — {copyReport.filesCopied} file(s)
+            into <code>{destDir}</code>
+          </p>
+          {copyReport.errors.length > 0 && (
+            <div className="review-report__errors">
+              <strong>{copyReport.errors.length} error(s):</strong>
+              <ul>
+                {copyReport.errors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="review-done-actions">
+            <button className="fc-btn" onClick={backToResult}>
+              Scan results
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

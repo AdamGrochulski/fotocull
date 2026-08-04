@@ -49,6 +49,25 @@ pub fn load_manifest(dest_dir: &str) -> Result<Manifest, String> {
     serde_json::from_str(&data).map_err(|e| format!("Corrupted manifest: {e}"))
 }
 
+/// Save the manifest atomically: write to a temp file in the same directory,
+/// then rename over the target. A crash mid-write can't corrupt the manifest.
+pub fn save_manifest(dest_dir: &str, manifest: &Manifest) -> Result<(), String> {
+    let path = manifest_path(dest_dir);
+    let dir = path
+        .parent()
+        .ok_or_else(|| "Invalid manifest path".to_string())?;
+    std::fs::create_dir_all(dir)
+        .map_err(|e| format!("Cannot create .fotocull directory: {e}"))?;
+
+    let json = serde_json::to_string_pretty(manifest)
+        .map_err(|e| format!("Cannot serialize manifest: {e}"))?;
+
+    let tmp = dir.join("manifest.json.tmp");
+    std::fs::write(&tmp, json).map_err(|e| format!("Cannot write manifest: {e}"))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("Cannot commit manifest: {e}"))?;
+    Ok(())
+}
+
 /// SHA-256 of a file's contents (hex). Reads in a stream — safe for large JPGs.
 pub fn hash_file(path: &str) -> Result<String, String> {
     let mut file =

@@ -1,3 +1,4 @@
+mod copy;
 mod fs_ops;
 mod image;
 mod manifest;
@@ -14,7 +15,8 @@ pub fn run() {
             scan::scan_source,
             manifest::hash_jpg,
             manifest::filter_by_manifest,
-            image::read_image
+            image::read_image,
+            copy::copy_accepted
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

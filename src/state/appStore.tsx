@@ -13,6 +13,13 @@ import {
   onHashProgress,
   type HashProgress,
 } from "../lib/manifest";
+import {
+  copyAccepted,
+  onCopyProgress,
+  type CopyJob,
+  type CopyProgress,
+  type CopyReport,
+} from "../lib/copy";
 import type { DirStatus, FolderRole } from "../types/fs";
 import type { Photo } from "../types/photo";
 import type { Decision, DecisionKind } from "../types/review";
@@ -74,6 +81,13 @@ interface AppState {
   reviewPrev: () => void;
   /** Return from review to the scan-result screen. */
   backToResult: () => void;
+
+  // --- copy (Stage 5) ---
+  copyStage: "idle" | "copying" | "done";
+  copyProgress: CopyProgress | null;
+  copyReport: CopyReport | null;
+  /** Copy all accepted photos to the destination folder. */
+  runCopy: () => Promise<void>;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -96,6 +110,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [reviewIndex, setReviewIndex] = useState(0);
   const [decisions, setDecisions] = useState<(Decision | undefined)[]>([]);
+
+  const [copyStage, setCopyStage] = useState<"idle" | "copying" | "done">("idle");
+  const [copyProgress, setCopyProgress] = useState<CopyProgress | null>(null);
+  const [copyReport, setCopyReport] = useState<CopyReport | null>(null);
 
   // Startup: load remembered paths and re-validate them (they may be gone).
   useEffect(() => {
@@ -226,7 +244,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
   function startReview() {
     setDecisions(new Array(photos.length).fill(undefined));
     setReviewIndex(0);
+    setCopyStage("idle");
+    setCopyProgress(null);
+    setCopyReport(null);
     setPhase("review");
+  }
+
+  async function runCopy() {
+    if (!destDir) return;
+    const jobs: CopyJob[] = [];
+    photos.forEach((p, i) => {
+      const d = decisions[i];
+      if (d?.kind !== "accept") return;
+      jobs.push({
+        baseName: p.baseName,
+        jpgPath: p.jpgPath,
+        arwPath: p.arwPath,
+        jpgHash: p.jpgHash,
+        includeArw: d.includeArw,
+        newName: d.newName || undefined,
+      });
+    });
+
+    setCopyStage("copying");
+    setCopyProgress(null);
+    setCopyReport(null);
+    const unlisten = await onCopyProgress(setCopyProgress);
+    try {
+      const report = await copyAccepted(destDir, jobs);
+      setCopyReport(report);
+    } catch (err) {
+      setCopyReport({ copied: 0, filesCopied: 0, errors: [String(err)] });
+    } finally {
+      unlisten();
+      setCopyStage("done");
+    }
   }
 
   function decideCurrent(
@@ -279,6 +331,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     decideCurrent,
     reviewPrev,
     backToResult,
+    copyStage,
+    copyProgress,
+    copyReport,
+    runCopy,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -171,3 +171,45 @@
   display: flex;
   gap: var(--fc-s4);
 }
+
+.review--done code {
+  font-family: var(--fc-mono);
+  font-size: 0.9em;
+  color: var(--fc-text-muted);
+  word-break: break-all;
+}
+
+.review-copying {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s3);
+  font-family: var(--fc-mono);
+  color: var(--fc-text-muted);
+}
+
+.review-report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fc-s4);
+  align-items: center;
+  width: 100%;
+  max-width: 640px;
+}
+.review-report__ok {
+  color: var(--fc-green);
+  font-weight: 600;
+  margin: 0;
+}
+.review-report__errors {
+  width: 100%;
+  text-align: left;
+  color: var(--fc-reject);
+  font-size: var(--fc-fs-sm);
+  border: 1px solid color-mix(in srgb, var(--fc-reject) 40%, transparent);
+  border-radius: var(--fc-r);
+  padding: var(--fc-s3) var(--fc-s4);
+}
+.review-report__errors ul {
+  margin: var(--fc-s2) 0 0;
+  padding-left: 1.2em;
+}
