@@ -4,8 +4,8 @@ import type { DirStatus, FolderRole } from "../types/fs";
 import "./StartScreen.css";
 
 /**
- * Ekran startowy (Etap 1): wybór folderu źródłowego i docelowego + walidacja.
- * Skan nośnika (Etap 2) rusza dopiero po wybraniu obu poprawnych folderów.
+ * Start screen (Stage 1): source and destination folder selection + validation.
+ * The media scan (Stage 2) only starts once both valid folders are chosen.
  */
 export function StartScreen() {
   const { loading, canProceed, startScan, scanError } = useAppState();
@@ -15,7 +15,7 @@ export function StartScreen() {
       <header className="start-screen__brand">
         <h1 className="start-screen__title">fotocull</h1>
         <p className="start-screen__tagline">
-          Szybka selekcja zdjęć z karty SD — akceptuj, odrzucaj, kopiuj.
+          Fast photo culling from your SD card — keep, reject, copy.
         </p>
       </header>
 
@@ -24,19 +24,19 @@ export function StartScreen() {
         <FolderCard role="dest" />
       </section>
 
-      {scanError && <div className="start-screen__error">Błąd skanu: {scanError}</div>}
+      {scanError && <div className="start-screen__error">Scan error: {scanError}</div>}
 
       <button
-        className="start-screen__proceed"
+        className="fc-btn fc-btn--primary start-screen__proceed"
         disabled={!canProceed || loading}
         onClick={startScan}
         title={
           canProceed
-            ? "Skanuj nośnik"
-            : "Najpierw wybierz poprawny folder źródłowy i docelowy"
+            ? "Scan media"
+            : "First choose a valid source and destination folder"
         }
       >
-        Skanuj nośnik →
+        Scan media →
       </button>
     </div>
   );
@@ -50,14 +50,14 @@ function FolderCard({ role }: { role: FolderRole }) {
   const dir = isSource ? sourceDir : destDir;
   const status = isSource ? sourceStatus : destStatus;
   const valid = isSource ? isSourceValid(status) : isDestValid(status);
-  const label = isSource ? "Folder źródłowy (karta SD)" : "Folder docelowy";
-  const buttonLabel = dir ? "Zmień…" : "Wybierz…";
+  const label = isSource ? "Source folder (SD card)" : "Destination folder";
+  const buttonLabel = dir ? "Change…" : "Choose…";
 
   return (
     <div className={`folder-card ${dir ? (valid ? "is-valid" : "is-invalid") : ""}`}>
       <div className="folder-card__head">
         <span className="folder-card__label">{label}</span>
-        <button className="folder-card__btn" onClick={() => selectFolder(role)}>
+        <button className="fc-btn" onClick={() => selectFolder(role)}>
           {buttonLabel}
         </button>
       </div>
@@ -73,7 +73,7 @@ function FolderCard({ role }: { role: FolderRole }) {
           <ValidationMsg role={role} status={status} />
         </>
       ) : (
-        <div className="folder-card__empty">Nie wybrano.</div>
+        <div className="folder-card__empty">Not selected.</div>
       )}
     </div>
   );
@@ -93,13 +93,13 @@ function ValidationMsg({
     return <div className="folder-card__msg is-ok">✓ OK</div>;
   }
 
-  let reason = "Nieprawidłowy folder.";
-  if (!status.exists) reason = "Ścieżka nie istnieje.";
-  else if (!status.isDir) reason = "To nie jest katalog.";
+  let reason = "Invalid folder.";
+  if (!status.exists) reason = "Path does not exist.";
+  else if (!status.isDir) reason = "Not a folder.";
   else if (role === "source" && !status.readable)
-    reason = "Brak uprawnień do odczytu.";
+    reason = "No read permission.";
   else if (role === "dest" && !status.writable)
-    reason = "Brak uprawnień do zapisu.";
+    reason = "No write permission.";
 
   return <div className="folder-card__msg is-err">✕ {reason}</div>;
 }

@@ -5,22 +5,22 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
-/// Jedno "zdjęcie" = para plików o wspólnej nazwie bazowej (stem).
-/// JPG jest podglądem, ARW towarzyszem; każde z nich może brakować.
+/// One "photo" = a pair of files sharing a base name (stem).
+/// The JPG is the preview, the ARW its companion; either one may be missing.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Photo {
-    /// Nazwa bazowa bez rozszerzenia, np. "DSC01234".
+    /// Base name without extension, e.g. "DSC01234".
     pub base_name: String,
-    /// Ścieżka do pliku JPG (jeśli jest).
+    /// Path to the JPG file (if present).
     pub jpg_path: Option<String>,
-    /// Ścieżka do pliku ARW (jeśli jest).
+    /// Path to the ARW file (if present).
     pub arw_path: Option<String>,
-    /// Katalog źródłowy pary (preferowany katalog JPG).
+    /// Source directory of the pair (JPG directory preferred).
     pub source_dir: String,
 }
 
-/// Postęp skanu wysyłany do frontendu eventem `scan://progress`.
+/// Scan progress sent to the frontend via the `scan://progress` event.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct ScanProgress {
@@ -28,7 +28,7 @@ struct ScanProgress {
     images_found: usize,
 }
 
-/// Akumulator budowany podczas walk — przed złożeniem w `Photo`.
+/// Accumulator built during the walk — before assembling into a `Photo`.
 #[derive(Default)]
 struct Entry {
     jpg_path: Option<String>,
@@ -43,23 +43,23 @@ fn parent_dir(p: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// Rekursywny skan katalogu źródłowego. Zbiera pliki .jpg/.jpeg/.arw
-/// (case-insensitive), grupuje po nazwie bazowej. Tylko odczyt — nic nie zmienia.
-/// Postęp raportuje eventami `scan://progress`.
+/// Recursively scan the source directory. Collects .jpg/.jpeg/.arw files
+/// (case-insensitive), grouped by base name. Read-only — changes nothing.
+/// Reports progress via `scan://progress` events.
 #[tauri::command]
 pub async fn scan_source(app: AppHandle, path: String) -> Result<Vec<Photo>, String> {
     tauri::async_runtime::spawn_blocking(move || scan_blocking(&app, &path))
         .await
-        .map_err(|e| format!("Zadanie skanu przerwane: {e}"))?
+        .map_err(|e| format!("Scan task aborted: {e}"))?
 }
 
 fn scan_blocking(app: &AppHandle, root: &str) -> Result<Vec<Photo>, String> {
     let root_path = Path::new(root);
     if !root_path.is_dir() {
-        return Err(format!("Folder źródłowy nie istnieje: {root}"));
+        return Err(format!("Source folder does not exist: {root}"));
     }
 
-    // Klucz mapy: nazwa bazowa (stem) — parowanie niezależnie od katalogu.
+    // Map key: base name (stem) — pairing is independent of directory.
     let mut entries: HashMap<String, Entry> = HashMap::new();
     let mut files_scanned: usize = 0;
 
@@ -100,7 +100,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<Vec<Photo>, String> {
             _ => {}
         }
 
-        // Raport postępu co 200 przeskanowanych plików.
+        // Report progress every 200 scanned files.
         if files_scanned % 200 == 0 {
             let _ = app.emit(
                 "scan://progress",
@@ -112,7 +112,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<Vec<Photo>, String> {
         }
     }
 
-    // Finalny event postępu (100%).
+    // Final progress event (100%).
     let _ = app.emit(
         "scan://progress",
         ScanProgress {
@@ -121,7 +121,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<Vec<Photo>, String> {
         },
     );
 
-    // Złóż wynik. source_dir: preferuj katalog JPG, w razie braku ARW.
+    // Assemble the result. source_dir: prefer the JPG directory, else the ARW one.
     let mut photos: Vec<Photo> = entries
         .into_iter()
         .map(|(base_name, e)| Photo {
@@ -132,7 +132,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<Vec<Photo>, String> {
         })
         .collect();
 
-    // Sortuj po nazwie bazowej — kolejność sekwencyjna z aparatu.
+    // Sort by base name — the camera's sequential order.
     photos.sort_by(|a, b| a.base_name.cmp(&b.base_name));
 
     Ok(photos)

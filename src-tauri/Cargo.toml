@@ -1,7 +1,7 @@
 [package]
 name = "fotocull"
 version = "0.1.0"
-description = "Szybka selekcja zdjęć (JPG+ARW) z karty SD"
+description = "Fast photo culling (JPG+ARW) from an SD card"
 authors = ["octoone"]
 edition = "2021"
 

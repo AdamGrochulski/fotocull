@@ -1,4 +1,4 @@
-/** Status katalogu zwrócony przez backend Rust (komenda `check_dir`). */
+/** Directory status returned by the Rust backend (command `check_dir`). */
 export interface DirStatus {
   exists: boolean;
   isDir: boolean;
@@ -6,5 +6,5 @@ export interface DirStatus {
   writable: boolean;
 }
 
-/** Rola wybieranego folderu. */
+/** Role of the folder being picked. */
 export type FolderRole = "source" | "dest";

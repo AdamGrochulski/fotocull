@@ -20,17 +20,17 @@ const SETTINGS_FILE = "settings.json";
 const KEY_SOURCE = "sourceDir";
 const KEY_DEST = "destDir";
 
-/** Katalog źródłowy jest OK, gdy istnieje, jest katalogiem i da się odczytać. */
+/** The source folder is OK when it exists, is a directory, and is readable. */
 export function isSourceValid(s: DirStatus | null): boolean {
   return !!s && s.exists && s.isDir && s.readable;
 }
 
-/** Katalog docelowy jest OK, gdy istnieje, jest katalogiem i da się zapisać. */
+/** The destination folder is OK when it exists, is a directory, and is writable. */
 export function isDestValid(s: DirStatus | null): boolean {
   return !!s && s.exists && s.isDir && s.writable;
 }
 
-/** Faza aplikacji. */
+/** Application phase. */
 export type Phase = "setup" | "scanning" | "scanned";
 
 interface AppState {
@@ -38,26 +38,26 @@ interface AppState {
   destDir: string | null;
   sourceStatus: DirStatus | null;
   destStatus: DirStatus | null;
-  /** Trwa walidacja przy starcie (wczytywanie zapamiętanych ścieżek). */
+  /** Validation in progress on startup (loading remembered paths). */
   loading: boolean;
-  /** Otwórz dialog i wybierz folder dla danej roli. */
+  /** Open the dialog and pick a folder for the given role. */
   selectFolder: (role: FolderRole) => Promise<void>;
-  /** Oba foldery wybrane i poprawne. */
+  /** Both folders selected and valid. */
   canProceed: boolean;
 
-  // --- skan (Etap 2) + filtrowanie po manifeście (Etap 3) ---
+  // --- scan (Stage 2) + manifest filtering (Stage 3) ---
   phase: Phase;
   photos: Photo[];
   scanProgress: ScanProgress | null;
   scanError: string | null;
-  /** Który podetap trwa w fazie "scanning": skan plików czy hashowanie. */
+  /** Which sub-stage of "scanning" is active: file scan or hashing. */
   scanStage: "scan" | "hash" | null;
   hashProgress: HashProgress | null;
-  /** Ile zdjęć pominięto, bo hash JPG był już w manifeście. */
+  /** How many photos were skipped because their JPG hash was already in the manifest. */
   filteredOut: number;
-  /** Uruchom skan folderu źródłowego. */
+  /** Run a scan of the source folder. */
   startScan: () => Promise<void>;
-  /** Wróć do ekranu wyboru folderów. */
+  /** Go back to the folder selection screen. */
   resetToSetup: () => void;
 }
 
@@ -79,7 +79,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [hashProgress, setHashProgress] = useState<HashProgress | null>(null);
   const [filteredOut, setFilteredOut] = useState(0);
 
-  // Start: wczytaj zapamiętane ścieżki i zwaliduj je ponownie (mogły zniknąć).
+  // Startup: load remembered paths and re-validate them (they may be gone).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -100,7 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setDestStatus(await checkDir(savedDest));
         }
       } catch (err) {
-        console.error("Nie udało się wczytać zapamiętanych ścieżek:", err);
+        console.error("Failed to load remembered paths:", err);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -113,10 +113,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function selectFolder(role: FolderRole) {
     const title =
       role === "source"
-        ? "Wybierz kartę / folder źródłowy"
-        : "Wybierz folder docelowy";
+        ? "Choose source card / folder"
+        : "Choose destination folder";
     const picked = await pickDirectory(title);
-    if (!picked) return; // anulowano
+    if (!picked) return; // cancelled
 
     const status = await checkDir(picked);
     if (role === "source") {
@@ -139,7 +139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setFilteredOut(0);
     setPhotos([]);
 
-    // Etap 1: rekursywny skan i parowanie.
+    // Step 1: recursive scan and pairing.
     setScanStage("scan");
     const unlistenScan = await onScanProgress(setScanProgress);
     let found: Photo[];
@@ -154,7 +154,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unlistenScan();
     }
 
-    // Etap 2: hash JPG i odfiltrowanie już-skopiowanych wg manifestu.
+    // Step 2: hash JPGs and filter out already-copied ones per the manifest.
     setScanStage("hash");
     const jpgPaths = found
       .map((p) => p.jpgPath)
@@ -174,7 +174,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Zdjęcia bez JPG (tylko ARW) zostają — nie da się ich dedupować po hashu.
+      // Photos without a JPG (ARW only) stay — they can't be deduped by hash.
       const remaining: Photo[] = [];
       for (const p of found) {
         if (!p.jpgPath) {
@@ -182,7 +182,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           continue;
         }
         const r = byPath.get(p.jpgPath);
-        if (r?.alreadyCopied) continue; // pomiń — już skopiowane
+        if (r?.alreadyCopied) continue; // skip — already copied
         remaining.push({ ...p, jpgHash: r?.hash });
       }
 
@@ -231,6 +231,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 export function useAppState(): AppState {
   const ctx = useContext(AppContext);
-  if (!ctx) throw new Error("useAppState musi być użyte wewnątrz <AppProvider>");
+  if (!ctx) throw new Error("useAppState must be used within <AppProvider>");
   return ctx;
 }

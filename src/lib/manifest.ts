@@ -1,26 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-/** Wynik hashowania jednego JPG i dopasowania do manifestu. */
+/** Result of hashing one JPG and matching it against the manifest. */
 export interface HashResult {
   path: string;
   hash: string;
   alreadyCopied: boolean;
 }
 
-/** Postęp hashowania (event `hash://progress`). */
+/** Hashing progress (event `hash://progress`). */
 export interface HashProgress {
   hashed: number;
   total: number;
 }
 
-/** SHA-256 pojedynczego pliku JPG. */
+/** SHA-256 of a single JPG file. */
 export async function hashJpg(path: string): Promise<string> {
   return invoke<string>("hash_jpg", { path });
 }
 
 /**
- * Zhashuj podane JPG-i i oznacz, które są już w manifeście folderu docelowego.
+ * Hash the given JPGs and mark which are already in the destination folder's manifest.
  */
 export async function filterByManifest(
   destDir: string,
@@ -29,7 +29,7 @@ export async function filterByManifest(
   return invoke<HashResult[]>("filter_by_manifest", { destDir, jpgPaths });
 }
 
-/** Subskrybuj postęp hashowania. Zwraca funkcję do odsubskrybowania. */
+/** Subscribe to hashing progress. Returns an unsubscribe function. */
 export async function onHashProgress(
   cb: (p: HashProgress) => void,
 ): Promise<UnlistenFn> {

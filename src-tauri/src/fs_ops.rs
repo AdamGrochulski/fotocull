@@ -1,22 +1,22 @@
 use std::path::Path;
 use serde::Serialize;
 
-/// Status katalogu zwracany do frontendu po walidacji wyboru.
+/// Directory status returned to the frontend after validating a selection.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DirStatus {
-    /// Ścieżka istnieje na dysku.
+    /// The path exists on disk.
     pub exists: bool,
-    /// Ścieżka jest katalogiem (a nie plikiem).
+    /// The path is a directory (not a file).
     pub is_dir: bool,
-    /// Katalog da się odczytać (listowanie zawartości).
+    /// The directory can be read (listing its contents).
     pub readable: bool,
-    /// Do katalogu da się zapisać (test przez utworzenie i skasowanie pliku).
+    /// The directory can be written to (tested by creating and deleting a file).
     pub writable: bool,
 }
 
-/// Sprawdź, czy do katalogu można zapisywać — realnym testem: utwórz plik
-/// tymczasowy i skasuj. Pewniejsze cross-platform niż czytanie bitów uprawnień.
+/// Check whether the directory is writable — with a real test: create a temp
+/// file and delete it. More reliable cross-platform than reading permission bits.
 fn probe_writable(dir: &Path) -> bool {
     let probe = dir.join(".fotocull_write_test");
     match std::fs::File::create(&probe) {
@@ -28,17 +28,17 @@ fn probe_writable(dir: &Path) -> bool {
     }
 }
 
-/// Waliduj katalog wybrany przez użytkownika (źródłowy lub docelowy).
-/// Nie modyfikuje niczego poza chwilowym plikiem-testem zapisu (od razu usuwanym).
+/// Validate a directory chosen by the user (source or destination).
+/// Modifies nothing except a momentary write-test file (removed immediately).
 #[tauri::command]
 pub fn check_dir(path: String) -> DirStatus {
     let p = Path::new(&path);
 
     let exists = p.exists();
     let is_dir = p.is_dir();
-    // Czytelność: próba wylistowania zawartości.
+    // Readability: try to list the contents.
     let readable = is_dir && std::fs::read_dir(p).is_ok();
-    // Zapisywalność testujemy tylko dla realnych katalogów.
+    // Only probe writability for real directories.
     let writable = if is_dir { probe_writable(p) } else { false };
 
     DirStatus {

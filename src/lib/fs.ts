@@ -3,16 +3,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { DirStatus } from "../types/fs";
 
 /**
- * Otwórz systemowy dialog wyboru katalogu.
- * Zwraca ścieżkę lub null gdy użytkownik anulował.
+ * Open the native directory picker dialog.
+ * Returns the path, or null if the user cancelled.
  */
 export async function pickDirectory(title: string): Promise<string | null> {
   const selected = await open({ directory: true, multiple: false, title });
-  // open() zwraca string | string[] | null; przy multiple:false to string | null.
+  // open() returns string | string[] | null; with multiple:false it's string | null.
   return typeof selected === "string" ? selected : null;
 }
 
-/** Zwaliduj katalog przez backend (istnieje / katalog / czytelny / zapisywalny). */
+/** Validate a directory via the backend (exists / is dir / readable / writable). */
 export async function checkDir(path: string): Promise<DirStatus> {
   return invoke<DirStatus>("check_dir", { path });
 }

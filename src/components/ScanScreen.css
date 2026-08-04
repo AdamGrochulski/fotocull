@@ -2,8 +2,8 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.75rem 2rem;
+  gap: var(--fc-s5);
+  padding: var(--fc-s6) var(--fc-s6);
   max-width: 900px;
   margin: 0 auto;
 }
@@ -12,41 +12,29 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--fc-s4);
 }
 
 .scan-header h2 {
   margin: 0;
-}
-
-.scan-back {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.4em 0.9em;
-  font: inherit;
-  font-size: 0.85rem;
-  cursor: pointer;
-  background: transparent;
-  color: inherit;
-}
-
-.scan-back:hover {
-  border-color: #396cd8;
+  font-weight: 660;
+  letter-spacing: -0.02em;
 }
 
 .scan-filtered {
-  padding: 0.6rem 0.9rem;
-  border: 1px solid var(--border);
-  border-left: 3px solid #396cd8;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  opacity: 0.85;
+  padding: var(--fc-s3) var(--fc-s4);
+  border: 1px solid var(--fc-line-hi);
+  border-left: 3px solid var(--fc-green);
+  border-radius: var(--fc-r);
+  font-size: var(--fc-fs-sm);
+  color: var(--fc-text-muted);
+  background: var(--fc-panel);
 }
 
 .scan-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 0.75rem;
+  gap: var(--fc-s3);
 }
 
 @media (max-width: 640px) {
@@ -56,50 +44,68 @@
 }
 
 .scan-stat {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.9rem;
+  border: 1px solid var(--fc-line-hi);
+  border-radius: var(--fc-r);
+  padding: var(--fc-s4);
   text-align: center;
+  background: var(--fc-panel);
 }
 
 .scan-stat__value {
-  font-size: 1.9rem;
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-2xl);
   font-weight: 700;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .scan-stat__label {
-  margin-top: 0.35rem;
-  font-size: 0.8rem;
-  opacity: 0.65;
+  margin-top: var(--fc-s2);
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fc-text-faint);
 }
 
 .scan-list {
   flex: 1;
   overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 1px solid var(--fc-line-hi);
+  border-radius: var(--fc-r);
+  background: var(--fc-panel);
 }
 
 .scan-list table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: var(--fc-fs-sm);
 }
 
 .scan-list th,
 .scan-list td {
-  padding: 0.45em 0.75em;
+  padding: 0.5em 0.8em;
   text-align: left;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--fc-line);
   white-space: nowrap;
 }
 
 .scan-list th {
   position: sticky;
   top: 0;
-  background: var(--bg);
+  background: var(--fc-panel-hi);
   z-index: 1;
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fc-text-faint);
+  font-weight: 600;
+}
+
+.scan-list td:first-child {
+  font-family: var(--fc-mono);
+  color: var(--fc-text);
 }
 
 .scan-list tbody tr:last-child td {
@@ -107,30 +113,32 @@
 }
 
 .scan-list__dir {
-  opacity: 0.6;
+  color: var(--fc-text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 220px;
 }
 
 .scan-empty {
-  opacity: 0.6;
+  color: var(--fc-text-faint);
   text-align: center;
-  padding: 2rem;
+  padding: var(--fc-s6);
 }
 
 .scan-progress {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  font-size: 1.05rem;
+  gap: var(--fc-s2);
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-md);
+  font-variant-numeric: tabular-nums;
 }
 
 .scan-spinner {
   width: 34px;
   height: 34px;
-  border: 3px solid var(--border);
-  border-top-color: #396cd8;
+  border: 3px solid var(--fc-line-hi);
+  border-top-color: var(--fc-green);
   border-radius: 50%;
   animation: scan-spin 0.8s linear infinite;
 }

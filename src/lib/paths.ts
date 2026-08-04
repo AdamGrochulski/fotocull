@@ -1,6 +1,6 @@
 /**
- * Ostatni segment ścieżki (nazwa folderu) — do zwięzłego wyświetlania.
- * Obsługuje separatory Windows (\) i Unix (/).
+ * Last path segment (folder name) — for compact display.
+ * Handles both Windows (\) and Unix (/) separators.
  */
 export function baseName(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, "");
