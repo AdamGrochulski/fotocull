@@ -189,6 +189,32 @@
   padding: 0.85em 1em;
 }
 
+/* Keyboard legend — quiet, discoverable. */
+.review-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fc-s2) var(--fc-s4);
+  justify-content: center;
+  margin-top: var(--fc-s1);
+  color: var(--fc-text-faint);
+  font-size: var(--fc-fs-xs);
+}
+.review-keys span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.review-keys kbd {
+  font-family: var(--fc-mono);
+  font-size: 0.9em;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--fc-line-hi);
+  background: var(--fc-ground-2);
+  color: var(--fc-text-muted);
+}
+
 /* --- completion --- */
 .review--done {
   justify-content: center;

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useAppState } from "../state/appStore";
 import { loadImageUrl } from "../lib/image";
 import { analyzeImage, type ImageAnalysis } from "../lib/analyze";
-import { PhotoViewer } from "./PhotoViewer";
+import { PhotoViewer, type PhotoViewerHandle } from "./PhotoViewer";
 import type { Photo } from "../types/photo";
 import "./ReviewScreen.css";
 
@@ -81,6 +81,8 @@ function ReviewCard({ photo }: { photo: Photo }) {
     };
   }, [photo.jpgPath]);
 
+  const viewerRef = useRef<PhotoViewerHandle>(null);
+
   function accept() {
     decideCurrent("accept", { includeArw, newName });
   }
@@ -88,30 +90,85 @@ function ReviewCard({ photo }: { photo: Photo }) {
     decideCurrent("reject", { includeArw, newName });
   }
 
-  // Keyboard: ← reject, → accept, Backspace prev. Ignored while typing a name.
-  const acceptRef = useRef(accept);
-  const rejectRef = useRef(reject);
-  acceptRef.current = accept;
-  rejectRef.current = reject;
+  // Latest handlers kept in refs so the window listener (mounted once) never
+  // goes stale as includeArw / newName change.
+  const actions = useRef({ accept, reject, toggleArw: () => {}, hasArw });
+  actions.current = {
+    accept,
+    reject,
+    toggleArw: () => hasArw && setIncludeArw((v) => !v),
+    hasArw,
+  };
+
+  // Global shortcuts. Photo controls (P/F/1/±) drive the PhotoViewer imperatively.
+  // Suspended while a text field is focused — the rename input handles its own keys.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const el = e.target as HTMLElement;
+      const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        acceptRef.current();
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        rejectRef.current();
-      } else if (e.key === "Backspace") {
-        e.preventDefault();
-        reviewPrev();
+      const v = viewerRef.current;
+      switch (e.key) {
+        case "ArrowRight":
+        case " ": // Space
+          e.preventDefault();
+          actions.current.accept();
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          actions.current.reject();
+          break;
+        case "Backspace":
+        case "u":
+        case "U":
+          e.preventDefault();
+          reviewPrev();
+          break;
+        case "r":
+        case "R":
+          e.preventDefault();
+          actions.current.toggleArw();
+          break;
+        case "p":
+        case "P":
+          e.preventDefault();
+          v?.togglePeaking();
+          break;
+        case "f":
+        case "F":
+          e.preventDefault();
+          v?.fit();
+          break;
+        case "1":
+          e.preventDefault();
+          v?.actual();
+          break;
+        case "+":
+        case "=":
+          e.preventDefault();
+          v?.zoomIn();
+          break;
+        case "-":
+        case "_":
+          e.preventDefault();
+          v?.zoomOut();
+          break;
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Enter in the rename field accepts; Escape drops focus back to the shortcuts.
+  function onRenameKey(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur();
+      accept();
+    } else if (e.key === "Escape") {
+      e.currentTarget.blur();
+    }
+  }
 
   return (
     <div className="review">
@@ -144,7 +201,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
             <div className="review-noimg">Could not load JPG preview.</div>
           </div>
         ) : imgUrl ? (
-          <PhotoViewer src={imgUrl} label={photo.baseName} />
+          <PhotoViewer ref={viewerRef} src={imgUrl} label={photo.baseName} />
         ) : (
           <div className="review-stage">
             <div className="review-loading">
@@ -191,6 +248,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
           value={newName}
           placeholder={`Rename… (default: ${photo.baseName})`}
           onChange={(e) => setNewName(e.currentTarget.value)}
+          onKeyDown={onRenameKey}
         />
       </div>
 
@@ -201,6 +259,17 @@ function ReviewCard({ photo }: { photo: Photo }) {
         <button className="fc-btn fc-btn--primary review-btn" onClick={accept}>
           Accept →
         </button>
+      </div>
+
+      <div className="review-keys" aria-hidden>
+        <span><kbd>←</kbd> reject</span>
+        <span><kbd>→</kbd>/<kbd>Space</kbd> accept</span>
+        <span><kbd>Backspace</kbd>/<kbd>U</kbd> undo</span>
+        <span><kbd>R</kbd> ARW</span>
+        <span><kbd>P</kbd> peaking</span>
+        <span><kbd>F</kbd> fit</span>
+        <span><kbd>1</kbd> 100%</span>
+        <span><kbd>+</kbd>/<kbd>−</kbd> zoom</span>
       </div>
     </div>
   );

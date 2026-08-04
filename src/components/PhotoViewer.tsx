@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import "./PhotoViewer.css";
 
 interface PhotoViewerProps {
@@ -6,6 +13,15 @@ interface PhotoViewerProps {
   src: string;
   /** Base name (for the empty/error label). */
   label: string;
+}
+
+/** Imperative controls, driven by the review screen's keyboard shortcuts. */
+export interface PhotoViewerHandle {
+  fit: () => void;
+  actual: () => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  togglePeaking: () => void;
 }
 
 const MAX_SCALE = 8;
@@ -28,7 +44,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  * paints green only where edges are sharp, and is an opt-in overlay (default OFF) —
  * never on while you're reading the raw photo.
  */
-export function PhotoViewer({ src, label }: PhotoViewerProps) {
+export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
+  function PhotoViewer({ src, label }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -257,13 +274,27 @@ export function PhotoViewer({ src, label }: PhotoViewerProps) {
     setPeakBuilt(true);
   }, []);
 
-  function togglePeaking() {
-    const next = !peaking;
+  const togglePeaking = useCallback(() => {
+    const next = !peakingRef.current;
     if (next && !peakBuilt) buildPeaking();
     peakingRef.current = next;
     setPeaking(next);
     draw();
-  }
+  }, [peakBuilt, buildPeaking, draw]);
+
+  // Expose zoom/fit/peaking so the review screen's keyboard shortcuts can drive
+  // the viewer without the toolbar.
+  useImperativeHandle(
+    ref,
+    () => ({
+      fit: fitToView,
+      actual: () => zoomCentered(1, true),
+      zoomIn: () => zoomCentered(ZOOM_STEP),
+      zoomOut: () => zoomCentered(1 / ZOOM_STEP),
+      togglePeaking,
+    }),
+    [fitToView, zoomCentered, togglePeaking],
+  );
 
   // --- pointer interaction -------------------------------------------------
   function onWheel(e: React.WheelEvent) {
@@ -359,4 +390,4 @@ export function PhotoViewer({ src, label }: PhotoViewerProps) {
       )}
     </div>
   );
-}
+});
