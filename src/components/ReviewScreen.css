@@ -87,9 +87,54 @@
   font-weight: 600;
   font-size: var(--fc-fs-md);
 }
+.review-meta__right {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s3);
+}
 .review-chips {
   display: flex;
   gap: var(--fc-s2);
+}
+
+/* Quality readout: coarse blur + exposure labels next to the file chips. */
+.review-quality {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fc-s2);
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+}
+.review-quality--wait {
+  color: var(--fc-text-faint);
+}
+.review-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--fc-line-hi);
+  color: var(--fc-text-muted);
+  text-transform: capitalize;
+  cursor: default;
+}
+.review-metric em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--fc-text-faint);
+}
+.review-metric--good {
+  border-color: var(--fc-green-dim);
+  color: var(--fc-green);
+}
+.review-metric--warn {
+  border-color: color-mix(in srgb, var(--fc-reject) 55%, transparent);
+  color: var(--fc-reject);
+}
+.review-metric--bad {
+  border-color: color-mix(in srgb, var(--fc-err) 60%, transparent);
+  color: var(--fc-err);
 }
 .fc-chip.is-off {
   opacity: 0.3;

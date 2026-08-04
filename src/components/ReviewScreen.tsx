@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/appStore";
 import { loadImageUrl } from "../lib/image";
+import { analyzeImage, type ImageAnalysis } from "../lib/analyze";
+import { PhotoViewer } from "./PhotoViewer";
 import type { Photo } from "../types/photo";
 import "./ReviewScreen.css";
 
@@ -27,6 +29,8 @@ function ReviewCard({ photo }: { photo: Photo }) {
   const [newName, setNewName] = useState(existing?.newName ?? "");
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
+  const [analysis, setAnalysis] = useState<ImageAnalysis | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
   // Sync inputs when the photo changes (also when stepping back to an edited one).
   useEffect(() => {
@@ -56,6 +60,24 @@ function ReviewCard({ photo }: { photo: Photo }) {
     return () => {
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
+    };
+  }, [photo.jpgPath]);
+
+  // Quality analysis (blur + exposure), computed in Rust off the UI thread.
+  useEffect(() => {
+    let cancelled = false;
+    setAnalysis(null);
+    if (!photo.jpgPath) {
+      setAnalyzing(false);
+      return;
+    }
+    setAnalyzing(true);
+    analyzeImage(photo.jpgPath)
+      .then((a) => !cancelled && setAnalysis(a))
+      .catch(() => !cancelled && setAnalysis(null))
+      .finally(() => !cancelled && setAnalyzing(false));
+    return () => {
+      cancelled = true;
     };
   }, [photo.jpgPath]);
 
@@ -116,31 +138,38 @@ function ReviewCard({ photo }: { photo: Photo }) {
         <i style={{ width: `${(reviewIndex / photos.length) * 100}%` }} />
       </div>
 
-      <div className="review-stage">
-        {hasJpg ? (
-          imgError ? (
+      {hasJpg ? (
+        imgError ? (
+          <div className="review-stage">
             <div className="review-noimg">Could not load JPG preview.</div>
-          ) : imgUrl ? (
-            <img className="review-img" src={imgUrl} alt={photo.baseName} />
-          ) : (
+          </div>
+        ) : imgUrl ? (
+          <PhotoViewer src={imgUrl} label={photo.baseName} />
+        ) : (
+          <div className="review-stage">
             <div className="review-loading">
               <div className="scan-spinner" aria-hidden />
             </div>
-          )
-        ) : (
+          </div>
+        )
+      ) : (
+        <div className="review-stage">
           <div className="review-noimg">
             ARW only — no JPG preview.
             <br />
             Accepting will copy the RAW file.
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="review-meta">
         <span className="review-name">{photo.baseName}</span>
-        <span className="review-chips">
-          <span className={`fc-chip ${hasJpg ? "" : "is-off"}`}>JPG</span>
-          <span className={`fc-chip ${hasArw ? "fc-chip--raw" : "is-off"}`}>ARW</span>
+        <span className="review-meta__right">
+          <QualityReadout analysis={analysis} analyzing={analyzing} hasJpg={hasJpg} />
+          <span className="review-chips">
+            <span className={`fc-chip ${hasJpg ? "" : "is-off"}`}>JPG</span>
+            <span className={`fc-chip ${hasArw ? "fc-chip--raw" : "is-off"}`}>ARW</span>
+          </span>
         </span>
       </div>
 
@@ -229,6 +258,49 @@ function ReviewComplete() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Compact blur + exposure readout, from the Rust `analyze_image` command. */
+function QualityReadout({
+  analysis,
+  analyzing,
+  hasJpg,
+}: {
+  analysis: ImageAnalysis | null;
+  analyzing: boolean;
+  hasJpg: boolean;
+}) {
+  if (!hasJpg) return null;
+  if (analyzing && !analysis) {
+    return <span className="review-quality review-quality--wait">analyzing…</span>;
+  }
+  if (!analysis) return null;
+
+  const sharpTone =
+    analysis.sharpLabel === "sharp"
+      ? "good"
+      : analysis.sharpLabel === "soft"
+        ? "warn"
+        : "bad";
+  const expTone = analysis.exposureLabel === "ok" ? "good" : "warn";
+
+  return (
+    <span className="review-quality">
+      <span
+        className={`review-metric review-metric--${sharpTone}`}
+        title={`Laplacian variance: ${analysis.sharpness.toFixed(0)}`}
+      >
+        {analysis.sharpLabel}
+        <em>{analysis.sharpness.toFixed(0)}</em>
+      </span>
+      <span
+        className={`review-metric review-metric--${expTone}`}
+        title={`Clipped highlights ${analysis.overexposedPct.toFixed(1)}% · shadows ${analysis.underexposedPct.toFixed(1)}%`}
+      >
+        {analysis.exposureLabel}
+      </span>
+    </span>
   );
 }
 

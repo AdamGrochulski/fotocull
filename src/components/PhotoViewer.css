@@ -1,0 +1,106 @@
+/* Photo inspector. Neutral ground, chrome floats over the image and dims out of
+   the way — the photo is the subject, controls stay quiet. */
+.pv {
+  position: relative;
+  flex: 1;
+  min-height: 340px;
+  border-radius: var(--fc-r-lg);
+  border: 1px solid var(--fc-line);
+  background: var(--fc-ground-2);
+  overflow: hidden;
+}
+
+.pv-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 340px;
+  touch-action: none;
+}
+
+.pv-msg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fc-text-faint);
+  font-size: var(--fc-fs-sm);
+  text-align: center;
+  padding: var(--fc-s6);
+}
+
+/* Floating control bar, bottom-centre. */
+.pv-toolbar {
+  position: absolute;
+  bottom: var(--fc-s3);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s2);
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fc-panel) 82%, transparent);
+  border: 1px solid var(--fc-line-hi);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--fc-shadow);
+  opacity: 0.55;
+  transition: opacity var(--fc-t);
+}
+.pv:hover .pv-toolbar,
+.pv-toolbar:focus-within {
+  opacity: 1;
+}
+
+.pv-tool {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--fc-text-muted);
+  font-family: var(--fc-sans);
+  font-size: var(--fc-fs-sm);
+  line-height: 1;
+  padding: 6px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background var(--fc-t), color var(--fc-t);
+}
+.pv-tool:hover {
+  background: var(--fc-line);
+  color: var(--fc-text);
+}
+
+.pv-zoom {
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--fc-text-muted);
+  min-width: 3.4em;
+  text-align: center;
+}
+
+.pv-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: var(--fc-line-hi);
+}
+
+/* Focus peaking is the one place green belongs on the toolbar — it signals the
+   overlay is armed. Off by default. */
+.pv-peak.is-on {
+  background: var(--fc-green-dim);
+  color: var(--fc-green-ink);
+  font-weight: 600;
+}
+.pv-peak.is-on:hover {
+  background: var(--fc-green);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-toolbar,
+  .pv-tool {
+    transition: none;
+  }
+}
