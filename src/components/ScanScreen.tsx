@@ -20,6 +20,7 @@ export function ScanScreen() {
     hashProgress,
     filteredOut,
     resetToSetup,
+    startReview,
   } = useAppState();
 
   if (phase === "scanning") {
@@ -52,9 +53,16 @@ export function ScanScreen() {
     <div className="scan-screen">
       <header className="scan-header">
         <h2>Scan result</h2>
-        <button className="fc-btn" onClick={resetToSetup}>
-          ← Change folders
-        </button>
+        <div className="scan-header__actions">
+          <button className="fc-btn" onClick={resetToSetup}>
+            ← Change folders
+          </button>
+          {photos.length > 0 && (
+            <button className="fc-btn fc-btn--primary" onClick={startReview}>
+              Start review →
+            </button>
+          )}
+        </div>
       </header>
 
       {filteredOut > 0 && (

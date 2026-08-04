@@ -1,11 +1,14 @@
 import { AppProvider, useAppState } from "./state/appStore";
 import { StartScreen } from "./components/StartScreen";
 import { ScanScreen } from "./components/ScanScreen";
+import { ReviewScreen } from "./components/ReviewScreen";
 import "./App.css";
 
 function Router() {
   const { phase } = useAppState();
-  return phase === "setup" ? <StartScreen /> : <ScanScreen />;
+  if (phase === "setup") return <StartScreen />;
+  if (phase === "review") return <ReviewScreen />;
+  return <ScanScreen />;
 }
 
 function App() {

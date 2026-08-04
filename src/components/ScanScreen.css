@@ -21,6 +21,11 @@
   letter-spacing: -0.02em;
 }
 
+.scan-header__actions {
+  display: flex;
+  gap: var(--fc-s3);
+}
+
 .scan-filtered {
   padding: var(--fc-s3) var(--fc-s4);
   border: 1px solid var(--fc-line-hi);

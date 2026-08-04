@@ -1,0 +1,173 @@
+.review {
+  min-height: 100vh;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: var(--fc-s4) var(--fc-s5) var(--fc-s6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fc-s3);
+}
+
+.review-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fc-s4);
+}
+
+.review-counter {
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-md);
+  font-variant-numeric: tabular-nums;
+  color: var(--fc-text-muted);
+}
+.review-counter__now {
+  color: var(--fc-green);
+  font-weight: 700;
+}
+.review-counter__sep {
+  margin: 0 0.35em;
+  opacity: 0.5;
+}
+
+.review-progress {
+  height: 4px;
+  border-radius: 3px;
+  background: var(--fc-line);
+  overflow: hidden;
+}
+.review-progress > i {
+  display: block;
+  height: 100%;
+  background: var(--fc-green);
+  transition: width var(--fc-t);
+}
+
+/* Photo stage — the hero. Neutral near-black ground so the image rules and
+   colour perception isn't biased (the "inspect = photo first" principle). */
+.review-stage {
+  flex: 1;
+  min-height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fc-ground-2);
+  border: 1px solid var(--fc-line);
+  border-radius: var(--fc-r-lg);
+  overflow: hidden;
+}
+
+.review-img {
+  max-width: 100%;
+  max-height: 62vh;
+  object-fit: contain;
+  display: block;
+}
+
+.review-loading,
+.review-noimg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--fc-s3);
+  color: var(--fc-text-faint);
+  font-size: var(--fc-fs-sm);
+  text-align: center;
+  padding: var(--fc-s6);
+}
+
+.review-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fc-s3);
+}
+.review-name {
+  font-family: var(--fc-mono);
+  font-weight: 600;
+  font-size: var(--fc-fs-md);
+}
+.review-chips {
+  display: flex;
+  gap: var(--fc-s2);
+}
+.fc-chip.is-off {
+  opacity: 0.3;
+  text-decoration: line-through;
+}
+
+.review-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s4);
+  flex-wrap: wrap;
+}
+
+.review-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fc-s2);
+  font-size: var(--fc-fs-sm);
+  cursor: pointer;
+  user-select: none;
+}
+.review-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--fc-green);
+  cursor: pointer;
+}
+.review-toggle.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.review-toggle__hint {
+  color: var(--fc-text-faint);
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+}
+
+.review-rename {
+  flex: 1;
+  min-width: 220px;
+}
+
+.review-actions {
+  display: flex;
+  gap: var(--fc-s4);
+  margin-top: var(--fc-s2);
+}
+.review-btn {
+  flex: 1;
+  font-size: var(--fc-fs-md);
+  padding: 0.85em 1em;
+}
+
+/* --- completion --- */
+.review--done {
+  justify-content: center;
+  text-align: center;
+  align-items: center;
+}
+.review--done h2 {
+  margin: 0;
+  font-weight: 660;
+  letter-spacing: -0.02em;
+}
+.review-done-sub {
+  color: var(--fc-text-muted);
+  margin: 0;
+}
+.review--done .scan-stats {
+  width: 100%;
+  max-width: 640px;
+}
+.review-note {
+  color: var(--fc-text-faint);
+  font-size: var(--fc-fs-sm);
+  max-width: 52ch;
+}
+.review-done-actions {
+  display: flex;
+  gap: var(--fc-s4);
+}

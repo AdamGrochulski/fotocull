@@ -15,6 +15,7 @@ import {
 } from "../lib/manifest";
 import type { DirStatus, FolderRole } from "../types/fs";
 import type { Photo } from "../types/photo";
+import type { Decision, DecisionKind } from "../types/review";
 
 const SETTINGS_FILE = "settings.json";
 const KEY_SOURCE = "sourceDir";
@@ -31,7 +32,7 @@ export function isDestValid(s: DirStatus | null): boolean {
 }
 
 /** Application phase. */
-export type Phase = "setup" | "scanning" | "scanned";
+export type Phase = "setup" | "scanning" | "scanned" | "review";
 
 interface AppState {
   sourceDir: string | null;
@@ -59,6 +60,20 @@ interface AppState {
   startScan: () => Promise<void>;
   /** Go back to the folder selection screen. */
   resetToSetup: () => void;
+
+  // --- review (Stage 4) ---
+  /** Index of the photo currently under review. */
+  reviewIndex: number;
+  /** Per-photo decisions, aligned to `photos` by index (undefined = not yet decided). */
+  decisions: (Decision | undefined)[];
+  /** Enter the review view starting at the first photo. */
+  startReview: () => void;
+  /** Record a decision for the current photo and advance to the next. */
+  decideCurrent: (kind: DecisionKind, opts: { includeArw: boolean; newName: string }) => void;
+  /** Step back to the previous photo (to change a decision). */
+  reviewPrev: () => void;
+  /** Return from review to the scan-result screen. */
+  backToResult: () => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -78,6 +93,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [scanStage, setScanStage] = useState<"scan" | "hash" | null>(null);
   const [hashProgress, setHashProgress] = useState<HashProgress | null>(null);
   const [filteredOut, setFilteredOut] = useState(0);
+
+  const [reviewIndex, setReviewIndex] = useState(0);
+  const [decisions, setDecisions] = useState<(Decision | undefined)[]>([]);
 
   // Startup: load remembered paths and re-validate them (they may be gone).
   useEffect(() => {
@@ -205,6 +223,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setScanError(null);
   }
 
+  function startReview() {
+    setDecisions(new Array(photos.length).fill(undefined));
+    setReviewIndex(0);
+    setPhase("review");
+  }
+
+  function decideCurrent(
+    kind: DecisionKind,
+    opts: { includeArw: boolean; newName: string },
+  ) {
+    setDecisions((prev) => {
+      const next = prev.slice();
+      next[reviewIndex] = {
+        kind,
+        includeArw: opts.includeArw,
+        newName: opts.newName.trim(),
+      };
+      return next;
+    });
+    // Advance (clamped at the end — the end state shows the review summary).
+    setReviewIndex((i) => Math.min(i + 1, photos.length));
+  }
+
+  function reviewPrev() {
+    setReviewIndex((i) => Math.max(0, i - 1));
+  }
+
+  function backToResult() {
+    setPhase("scanned");
+  }
+
   const canProceed = isSourceValid(sourceStatus) && isDestValid(destStatus);
 
   const value: AppState = {
@@ -224,6 +273,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     filteredOut,
     startScan,
     resetToSetup,
+    reviewIndex,
+    decisions,
+    startReview,
+    decideCurrent,
+    reviewPrev,
+    backToResult,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
