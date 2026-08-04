@@ -1,0 +1,31 @@
+.start-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.start-screen__title {
+  margin: 0;
+  font-size: 3.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.start-screen__tagline {
+  margin: 0.5rem 0 0;
+  font-size: 1.05rem;
+  opacity: 0.7;
+}
+
+.start-screen__placeholder {
+  padding: 1.5rem 2rem;
+  border: 1px dashed var(--border, #444);
+  border-radius: 12px;
+  opacity: 0.6;
+  font-size: 0.95rem;
+}
