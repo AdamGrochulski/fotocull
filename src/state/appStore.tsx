@@ -28,6 +28,14 @@ const SETTINGS_FILE = "settings.json";
 const KEY_SOURCE = "sourceDir";
 const KEY_DEST = "destDir";
 
+/** Per-destination review progress, so quitting mid-review is safe and rejected
+ * photos never come back. Keyed by destination path. */
+const SESSIONS_FILE = "sessions.json";
+type StoredDecision = { kind: DecisionKind; includeArw: boolean; newName: string };
+interface SessionRecord {
+  reviewed: Record<string, StoredDecision>;
+}
+
 /** The source folder is OK when it exists, is a directory, and is readable. */
 export function isSourceValid(s: DirStatus | null): boolean {
   return !!s && s.exists && s.isDir && s.readable;
@@ -94,6 +102,9 @@ const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<Store | null>(null);
+  const [sessions, setSessions] = useState<Store | null>(null);
+  /** Reviewed hashes for the destination being worked on (accept/reject). */
+  const [reviewed, setReviewed] = useState<Record<string, StoredDecision>>({});
   const [sourceDir, setSourceDir] = useState<string | null>(null);
   const [destDir, setDestDir] = useState<string | null>(null);
   const [sourceStatus, setSourceStatus] = useState<DirStatus | null>(null);
@@ -121,8 +132,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const s = await load(SETTINGS_FILE, { autoSave: true });
+        const sess = await load(SESSIONS_FILE, { autoSave: true });
         if (cancelled) return;
         setStore(s);
+        setSessions(sess);
 
         const savedSource = (await s.get<string>(KEY_SOURCE)) ?? null;
         const savedDest = (await s.get<string>(KEY_DEST)) ?? null;
@@ -163,6 +176,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setDestDir(picked);
       setDestStatus(status);
       await store?.set(KEY_DEST, picked);
+    }
+  }
+
+  /** Persist the reviewed map for a destination (crash-safe skip-list + resume). */
+  async function persistReviewed(
+    dest: string,
+    map: Record<string, StoredDecision>,
+  ) {
+    try {
+      await sessions?.set(dest, { reviewed: map } satisfies SessionRecord);
+    } catch (err) {
+      console.error("Failed to persist review progress:", err);
     }
   }
 
@@ -210,6 +235,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // Load this destination's review history: already-copied (manifest) and
+      // previously-rejected photos are hidden; accepted-but-not-yet-copied ones
+      // stay and get their decision restored later (resume).
+      const rev =
+        (await sessions?.get<SessionRecord>(destDir))?.reviewed ?? {};
+      setReviewed(rev);
+
       // Photos without a JPG (ARW only) stay — they can't be deduped by hash.
       const remaining: Photo[] = [];
       for (const p of found) {
@@ -219,6 +251,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         const r = byPath.get(p.jpgPath);
         if (r?.alreadyCopied) continue; // skip — already copied
+        if (r?.hash && rev[r.hash]?.kind === "reject") continue; // permanently rejected
         remaining.push({ ...p, jpgHash: r?.hash });
       }
 
@@ -242,8 +275,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   function startReview() {
-    setDecisions(new Array(photos.length).fill(undefined));
-    setReviewIndex(0);
+    // Restore accepted-but-not-copied decisions from a prior session, and start
+    // at the first photo still undecided (resume where you left off).
+    const seeded: (Decision | undefined)[] = photos.map((p) => {
+      const r = p.jpgHash ? reviewed[p.jpgHash] : undefined;
+      return r?.kind === "accept"
+        ? { kind: "accept", includeArw: r.includeArw, newName: r.newName }
+        : undefined;
+    });
+    const firstUndecided = seeded.findIndex((d) => d === undefined);
+    setDecisions(seeded);
+    setReviewIndex(firstUndecided === -1 ? photos.length : firstUndecided);
     setCopyStage("idle");
     setCopyProgress(null);
     setCopyReport(null);
@@ -273,6 +315,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const report = await copyAccepted(destDir, jobs);
       setCopyReport(report);
+      // Copied photos now live in the manifest, so drop their pending accepts
+      // from the session record. Rejects stay — they're the permanent skip-list.
+      setReviewed((prev) => {
+        const next: Record<string, StoredDecision> = {};
+        for (const [h, v] of Object.entries(prev)) {
+          if (v.kind === "reject") next[h] = v;
+        }
+        void persistReviewed(destDir, next);
+        return next;
+      });
     } catch (err) {
       setCopyReport({ copied: 0, filesCopied: 0, errors: [String(err)] });
     } finally {
@@ -286,15 +338,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     kind: DecisionKind,
     opts: { includeArw: boolean; newName: string },
   ) {
+    const newName = opts.newName.trim();
     setDecisions((prev) => {
       const next = prev.slice();
-      next[reviewIndex] = {
-        kind,
-        includeArw: opts.includeArw,
-        newName: opts.newName.trim(),
-      };
+      next[reviewIndex] = { kind, includeArw: opts.includeArw, newName };
       return next;
     });
+
+    // Persist immediately, keyed by JPG hash, so a crash or early quit can't lose
+    // the decision. Rejects become a permanent skip-list; accepts are resumable
+    // until the copy moves them into the manifest.
+    const photo = photos[reviewIndex];
+    if (photo?.jpgHash && destDir) {
+      setReviewed((prev) => {
+        const next = {
+          ...prev,
+          [photo.jpgHash!]: { kind, includeArw: opts.includeArw, newName },
+        };
+        void persistReviewed(destDir, next);
+        return next;
+      });
+    }
+
     // Advance (clamped at the end — the end state shows the review summary).
     setReviewIndex((i) => Math.min(i + 1, photos.length));
   }

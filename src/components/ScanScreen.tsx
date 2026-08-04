@@ -67,8 +67,8 @@ export function ScanScreen() {
 
       {filteredOut > 0 && (
         <div className="scan-filtered">
-          Skipped {filteredOut} photo(s) — already copied earlier (matched by JPG
-          hash in the manifest).
+          Skipped {filteredOut} photo(s) — already handled earlier (copied or
+          rejected), matched by JPG hash.
         </div>
       )}
 
@@ -82,7 +82,7 @@ export function ScanScreen() {
       {photos.length === 0 ? (
         <p className="scan-empty">
           {filteredOut > 0
-            ? "Nothing new — every photo here was already copied in an earlier session."
+            ? "Nothing new — every photo here was already copied or rejected in an earlier session."
             : "No JPG/ARW files found in the selected folder."}
         </p>
       ) : (
