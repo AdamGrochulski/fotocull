@@ -186,16 +186,21 @@ export function PhotoViewer({ src, label }: PhotoViewerProps) {
     };
   }, [src, fitToView]);
 
-  // Redraw on container resize.
+  // React to container resize (window resize, fullscreen toggle). If the view is
+  // still at Fit, re-fit to the new size; if the user has zoomed in, keep their
+  // scale but re-clamp the pan so nothing drifts out of bounds.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
-      if (imgRef.current) draw();
+      if (!imgRef.current) return;
+      const { scale, fit } = view.current;
+      if (Math.abs(scale - fit) < 1e-3) fitToView();
+      else applyView({});
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [draw]);
+  }, [fitToView, applyView]);
 
   // --- focus peaking (built lazily on first toggle) ------------------------
   const buildPeaking = useCallback(() => {

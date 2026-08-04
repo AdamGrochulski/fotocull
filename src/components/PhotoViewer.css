@@ -2,8 +2,9 @@
    the way — the photo is the subject, controls stay quiet. */
 .pv {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 340px;
+  max-height: 72vh;
   border-radius: var(--fc-r-lg);
   border: 1px solid var(--fc-line);
   background: var(--fc-ground-2);
