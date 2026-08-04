@@ -4,7 +4,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2.5rem;
+  gap: 2rem;
   padding: 2rem;
   text-align: center;
 }
@@ -17,15 +17,126 @@
 }
 
 .start-screen__tagline {
-  margin: 0.5rem 0 0;
+  margin: 0.4rem 0 0;
   font-size: 1.05rem;
   opacity: 0.7;
 }
 
-.start-screen__placeholder {
-  padding: 1.5rem 2rem;
-  border: 1px dashed var(--border, #444);
+.folder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 720px;
+}
+
+@media (max-width: 640px) {
+  .folder-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.folder-card {
+  text-align: left;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--border);
   border-radius: 12px;
-  opacity: 0.6;
+  background: rgba(127, 127, 127, 0.04);
+  min-width: 0;
+}
+
+.folder-card.is-valid {
+  border-color: #2e9e5b;
+}
+
+.folder-card.is-invalid {
+  border-color: #d1433f;
+}
+
+.folder-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.folder-card__label {
+  font-weight: 600;
   font-size: 0.95rem;
+}
+
+.folder-card__btn {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35em 0.9em;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.folder-card__btn:hover {
+  border-color: #396cd8;
+}
+
+.folder-card__name {
+  font-weight: 600;
+  font-size: 1.05rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-card__path {
+  font-size: 0.78rem;
+  opacity: 0.55;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* przycinaj od początku, pokaż ogon ścieżki */
+  text-align: left;
+}
+
+.folder-card__empty {
+  opacity: 0.45;
+  font-size: 0.9rem;
+}
+
+.folder-card__msg {
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.folder-card__msg.is-ok {
+  color: #2e9e5b;
+}
+
+.folder-card__msg.is-err {
+  color: #d1433f;
+}
+
+.start-screen__proceed {
+  border: none;
+  border-radius: 10px;
+  padding: 0.75em 1.8em;
+  font: inherit;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  background: #396cd8;
+  color: #fff;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.start-screen__proceed:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.start-screen__proceed:not(:disabled):hover {
+  background: #2f5bc0;
 }

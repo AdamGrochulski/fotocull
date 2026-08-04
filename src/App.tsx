@@ -1,8 +1,13 @@
+import { AppProvider } from "./state/appStore";
 import { StartScreen } from "./components/StartScreen";
 import "./App.css";
 
 function App() {
-  return <StartScreen />;
+  return (
+    <AppProvider>
+      <StartScreen />
+    </AppProvider>
+  );
 }
 
 export default App;
