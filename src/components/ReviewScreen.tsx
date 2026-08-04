@@ -261,7 +261,8 @@ function ReviewComplete() {
   );
 }
 
-/** Compact blur + exposure readout, from the Rust `analyze_image` command. */
+/** Compact exposure readout, from the Rust `analyze_image` command.
+ * Sharpness is judged by eye via focus peaking, so no blur label here. */
 function QualityReadout({
   analysis,
   analyzing,
@@ -277,23 +278,10 @@ function QualityReadout({
   }
   if (!analysis) return null;
 
-  const sharpTone =
-    analysis.sharpLabel === "sharp"
-      ? "good"
-      : analysis.sharpLabel === "soft"
-        ? "warn"
-        : "bad";
   const expTone = analysis.exposureLabel === "ok" ? "good" : "warn";
 
   return (
     <span className="review-quality">
-      <span
-        className={`review-metric review-metric--${sharpTone}`}
-        title={`Laplacian variance: ${analysis.sharpness.toFixed(0)}`}
-      >
-        {analysis.sharpLabel}
-        <em>{analysis.sharpness.toFixed(0)}</em>
-      </span>
       <span
         className={`review-metric review-metric--${expTone}`}
         title={`Clipped highlights ${analysis.overexposedPct.toFixed(1)}% · shadows ${analysis.underexposedPct.toFixed(1)}%`}
