@@ -1,10 +1,11 @@
 .review {
   min-height: 100vh;
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: var(--fc-s4) var(--fc-s5) var(--fc-s6);
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: var(--fc-s3);
 }
 
@@ -46,9 +47,8 @@
 /* Photo stage — the hero. Neutral near-black ground so the image rules and
    colour perception isn't biased (the "inspect = photo first" principle). */
 .review-stage {
-  flex: 1 1 auto;
+  height: calc(100vh - 360px);
   min-height: 340px;
-  max-height: 72vh;
   display: flex;
   align-items: center;
   justify-content: center;
