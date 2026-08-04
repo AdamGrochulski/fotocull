@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
@@ -73,7 +75,7 @@ pub fn hash_file(path: &str) -> Result<String, String> {
     let mut file =
         std::fs::File::open(path).map_err(|e| format!("Cannot open {path}: {e}"))?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 64 * 1024];
+    let mut buf = vec![0u8; 1024 * 1024];
     loop {
         let n = file
             .read(&mut buf)
@@ -121,26 +123,36 @@ pub async fn filter_by_manifest(
     tauri::async_runtime::spawn_blocking(move || {
         let manifest = load_manifest(&dest_dir)?;
         let total = jpg_paths.len();
+        let done = AtomicUsize::new(0);
+
+        // Hash in parallel: reading each JPG from the card and computing SHA-256
+        // is the slow part, so overlap I/O and spread the hashing across cores.
+        // Output order doesn't matter — the frontend maps results back by path.
+        let results: Vec<Result<HashResult, String>> = jpg_paths
+            .par_iter()
+            .map(|path| {
+                let hash = hash_file(path)?;
+                let already_copied = manifest.entries.contains_key(&hash);
+
+                let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+                if n % 20 == 0 || n == total {
+                    let _ = app.emit(
+                        "hash://progress",
+                        HashProgress { hashed: n, total },
+                    );
+                }
+
+                Ok(HashResult {
+                    path: path.clone(),
+                    hash,
+                    already_copied,
+                })
+            })
+            .collect();
+
         let mut out = Vec::with_capacity(total);
-
-        for (i, path) in jpg_paths.into_iter().enumerate() {
-            let hash = hash_file(&path)?;
-            let already_copied = manifest.entries.contains_key(&hash);
-            out.push(HashResult {
-                path,
-                hash,
-                already_copied,
-            });
-
-            if (i + 1) % 20 == 0 || i + 1 == total {
-                let _ = app.emit(
-                    "hash://progress",
-                    HashProgress {
-                        hashed: i + 1,
-                        total,
-                    },
-                );
-            }
+        for r in results {
+            out.push(r?);
         }
         Ok(out)
     })

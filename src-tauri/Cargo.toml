@@ -28,4 +28,5 @@ walkdir = "2"
 sha2 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+rayon = "1"
 
