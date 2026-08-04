@@ -16,3 +16,8 @@ export async function pickDirectory(title: string): Promise<string | null> {
 export async function checkDir(path: string): Promise<DirStatus> {
   return invoke<DirStatus>("check_dir", { path });
 }
+
+/** Open a folder in the OS file manager. */
+export async function openFolder(path: string): Promise<void> {
+  return invoke("open_folder", { path });
+}

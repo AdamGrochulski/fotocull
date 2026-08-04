@@ -1,5 +1,7 @@
 use std::path::Path;
 use serde::Serialize;
+use tauri::AppHandle;
+use tauri_plugin_opener::OpenerExt;
 
 /// Directory status returned to the frontend after validating a selection.
 #[derive(Serialize)]
@@ -47,4 +49,13 @@ pub fn check_dir(path: String) -> DirStatus {
         readable,
         writable,
     }
+}
+
+/// Open a folder in the OS file manager. Uses the opener plugin from the backend
+/// (no frontend ACL/scope needed).
+#[tauri::command]
+pub fn open_folder(app: AppHandle, path: String) -> Result<(), String> {
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| format!("Cannot open folder: {e}"))
 }

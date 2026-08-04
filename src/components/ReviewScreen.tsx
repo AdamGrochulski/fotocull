@@ -178,17 +178,8 @@ function ReviewCard({ photo }: { photo: Photo }) {
 }
 
 function ReviewComplete() {
-  const {
-    photos,
-    destDir,
-    decisions,
-    reviewPrev,
-    backToResult,
-    copyStage,
-    copyProgress,
-    copyReport,
-    runCopy,
-  } = useAppState();
+  const { photos, destDir, decisions, reviewPrev, copyStage, copyProgress, runCopy } =
+    useAppState();
 
   const accepted = decisions.filter((d) => d?.kind === "accept").length;
   const rejected = decisions.filter((d) => d?.kind === "reject").length;
@@ -235,30 +226,6 @@ function ReviewComplete() {
           <span>
             Copying {copyProgress?.done ?? 0} / {copyProgress?.total ?? accepted}…
           </span>
-        </div>
-      )}
-
-      {copyStage === "done" && copyReport && (
-        <div className="review-report">
-          <p className="review-report__ok">
-            ✓ Copied {copyReport.copied} photo(s) — {copyReport.filesCopied} file(s)
-            into <code>{destDir}</code>
-          </p>
-          {copyReport.errors.length > 0 && (
-            <div className="review-report__errors">
-              <strong>{copyReport.errors.length} error(s):</strong>
-              <ul>
-                {copyReport.errors.map((e, i) => (
-                  <li key={i}>{e}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <div className="review-done-actions">
-            <button className="fc-btn" onClick={backToResult}>
-              Scan results
-            </button>
-          </div>
         </div>
       )}
     </div>

@@ -40,7 +40,7 @@ src-tauri/gen/
 
 # --- Dane testowe (zdjęcia) ---
 test-photos/
-test-out/
-test-dest/
+test-out*/
+test-dest*/
 *.ARW
 *.arw

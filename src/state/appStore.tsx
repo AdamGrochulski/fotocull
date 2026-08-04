@@ -39,7 +39,7 @@ export function isDestValid(s: DirStatus | null): boolean {
 }
 
 /** Application phase. */
-export type Phase = "setup" | "scanning" | "scanned" | "review";
+export type Phase = "setup" | "scanning" | "scanned" | "review" | "summary";
 
 interface AppState {
   sourceDir: string | null;
@@ -278,6 +278,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       unlisten();
       setCopyStage("done");
+      setPhase("summary");
     }
   }
 

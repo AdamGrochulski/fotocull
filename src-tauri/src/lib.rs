@@ -12,6 +12,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             fs_ops::check_dir,
+            fs_ops::open_folder,
             scan::scan_source,
             manifest::hash_jpg,
             manifest::filter_by_manifest,
