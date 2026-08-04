@@ -11,4 +11,6 @@ export interface Photo {
   arwPath?: string;
   /** Katalog źródłowy, w którym leży para. */
   sourceDir: string;
+  /** SHA-256 pliku JPG — liczony w Etapie 3, używany do dedupu i manifestu. */
+  jpgHash?: string;
 }

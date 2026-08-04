@@ -8,6 +8,11 @@ import {
 import { load, type Store } from "@tauri-apps/plugin-store";
 import { checkDir, pickDirectory } from "../lib/fs";
 import { scanSource, onScanProgress, type ScanProgress } from "../lib/scan";
+import {
+  filterByManifest,
+  onHashProgress,
+  type HashProgress,
+} from "../lib/manifest";
 import type { DirStatus, FolderRole } from "../types/fs";
 import type { Photo } from "../types/photo";
 
@@ -40,11 +45,16 @@ interface AppState {
   /** Oba foldery wybrane i poprawne. */
   canProceed: boolean;
 
-  // --- skan (Etap 2) ---
+  // --- skan (Etap 2) + filtrowanie po manifeście (Etap 3) ---
   phase: Phase;
   photos: Photo[];
   scanProgress: ScanProgress | null;
   scanError: string | null;
+  /** Który podetap trwa w fazie "scanning": skan plików czy hashowanie. */
+  scanStage: "scan" | "hash" | null;
+  hashProgress: HashProgress | null;
+  /** Ile zdjęć pominięto, bo hash JPG był już w manifeście. */
+  filteredOut: number;
   /** Uruchom skan folderu źródłowego. */
   startScan: () => Promise<void>;
   /** Wróć do ekranu wyboru folderów. */
@@ -65,6 +75,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [scanStage, setScanStage] = useState<"scan" | "hash" | null>(null);
+  const [hashProgress, setHashProgress] = useState<HashProgress | null>(null);
+  const [filteredOut, setFilteredOut] = useState(0);
 
   // Start: wczytaj zapamiętane ścieżki i zwaliduj je ponownie (mogły zniknąć).
   useEffect(() => {
@@ -118,28 +131,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function startScan() {
-    if (!sourceDir) return;
+    if (!sourceDir || !destDir) return;
     setPhase("scanning");
     setScanError(null);
     setScanProgress(null);
+    setHashProgress(null);
+    setFilteredOut(0);
     setPhotos([]);
 
-    const unlisten = await onScanProgress(setScanProgress);
+    // Etap 1: rekursywny skan i parowanie.
+    setScanStage("scan");
+    const unlistenScan = await onScanProgress(setScanProgress);
+    let found: Photo[];
     try {
-      const found = await scanSource(sourceDir);
-      setPhotos(found);
+      found = await scanSource(sourceDir);
+    } catch (err) {
+      setScanError(String(err));
+      setPhase("setup");
+      unlistenScan();
+      return;
+    } finally {
+      unlistenScan();
+    }
+
+    // Etap 2: hash JPG i odfiltrowanie już-skopiowanych wg manifestu.
+    setScanStage("hash");
+    const jpgPaths = found
+      .map((p) => p.jpgPath)
+      .filter((x): x is string => !!x);
+
+    try {
+      const byPath = new Map<string, { hash: string; alreadyCopied: boolean }>();
+      if (jpgPaths.length > 0) {
+        const unlistenHash = await onHashProgress(setHashProgress);
+        try {
+          const results = await filterByManifest(destDir, jpgPaths);
+          for (const r of results) {
+            byPath.set(r.path, { hash: r.hash, alreadyCopied: r.alreadyCopied });
+          }
+        } finally {
+          unlistenHash();
+        }
+      }
+
+      // Zdjęcia bez JPG (tylko ARW) zostają — nie da się ich dedupować po hashu.
+      const remaining: Photo[] = [];
+      for (const p of found) {
+        if (!p.jpgPath) {
+          remaining.push(p);
+          continue;
+        }
+        const r = byPath.get(p.jpgPath);
+        if (r?.alreadyCopied) continue; // pomiń — już skopiowane
+        remaining.push({ ...p, jpgHash: r?.hash });
+      }
+
+      setFilteredOut(found.length - remaining.length);
+      setPhotos(remaining);
       setPhase("scanned");
     } catch (err) {
       setScanError(String(err));
       setPhase("setup");
     } finally {
-      unlisten();
+      setScanStage(null);
     }
   }
 
   function resetToSetup() {
     setPhase("setup");
     setScanProgress(null);
+    setHashProgress(null);
+    setScanStage(null);
     setScanError(null);
   }
 
@@ -157,6 +219,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     photos,
     scanProgress,
     scanError,
+    scanStage,
+    hashProgress,
+    filteredOut,
     startScan,
     resetToSetup,
   };

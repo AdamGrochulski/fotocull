@@ -12,15 +12,31 @@ function pairKind(p: Photo): "pair" | "jpgOnly" | "arwOnly" {
 
 /** Ekran skanu (Etap 2): postęp + wynik parowania. Przeglądanie dojdzie w Etapie 4. */
 export function ScanScreen() {
-  const { phase, photos, scanProgress, resetToSetup } = useAppState();
+  const {
+    phase,
+    photos,
+    scanProgress,
+    scanStage,
+    hashProgress,
+    filteredOut,
+    resetToSetup,
+  } = useAppState();
 
   if (phase === "scanning") {
     return (
       <div className="scan-screen">
-        <h2>Skanowanie nośnika…</h2>
+        <h2>{scanStage === "hash" ? "Sprawdzanie manifestu…" : "Skanowanie nośnika…"}</h2>
         <div className="scan-progress">
-          <div>Przeskanowano plików: {scanProgress?.filesScanned ?? 0}</div>
-          <div>Znaleziono zdjęć: {scanProgress?.imagesFound ?? 0}</div>
+          {scanStage === "hash" ? (
+            <div>
+              Hashowanie JPG: {hashProgress?.hashed ?? 0} / {hashProgress?.total ?? 0}
+            </div>
+          ) : (
+            <>
+              <div>Przeskanowano plików: {scanProgress?.filesScanned ?? 0}</div>
+              <div>Znaleziono zdjęć: {scanProgress?.imagesFound ?? 0}</div>
+            </>
+          )}
         </div>
         <div className="scan-spinner" aria-hidden />
       </div>
@@ -40,6 +56,13 @@ export function ScanScreen() {
           ← Zmień foldery
         </button>
       </header>
+
+      {filteredOut > 0 && (
+        <div className="scan-filtered">
+          Pominięto {filteredOut} zdjęć — już wcześniej skopiowane (dopasowane po
+          hashu JPG w manifeście).
+        </div>
+      )}
 
       <div className="scan-stats">
         <Stat label="Zdjęć razem" value={photos.length} />

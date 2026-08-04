@@ -34,6 +34,15 @@
   border-color: #396cd8;
 }
 
+.scan-filtered {
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid #396cd8;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
 .scan-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

@@ -1,4 +1,5 @@
 mod fs_ops;
+mod manifest;
 mod scan;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -7,7 +8,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![fs_ops::check_dir, scan::scan_source])
+        .invoke_handler(tauri::generate_handler![
+            fs_ops::check_dir,
+            scan::scan_source,
+            manifest::hash_jpg,
+            manifest::filter_by_manifest
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
