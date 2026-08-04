@@ -107,6 +107,10 @@
 .review-thumb.is-reject {
   border-color: var(--fc-reject);
 }
+.review-thumb.is-current {
+  outline: 2px solid var(--fc-text);
+  outline-offset: 1px;
+}
 .review-thumb__no {
   position: absolute;
   bottom: 0;

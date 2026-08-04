@@ -512,32 +512,52 @@ function RenameField({
   );
 }
 
-/** Filmstrip of recently reviewed frames — compare bursts, jump back to any. */
+/** How many frames each side of the current one the filmstrip shows. */
+const STRIP_RADIUS = 4;
+
+/** Filmstrip of nearby frames (previous and next). Click any to jump to it
+ * without making a decision — scrub a burst freely before choosing. */
 function Filmstrip() {
   const { photos, reviewIndex, goToReview } = useAppState();
 
+  const start = Math.max(0, reviewIndex - STRIP_RADIUS);
+  const end = Math.min(photos.length - 1, reviewIndex + STRIP_RADIUS);
   const items: number[] = [];
-  for (let i = Math.max(0, reviewIndex - 12); i < reviewIndex; i++) {
+  for (let i = start; i <= end; i++) {
     if (photos[i]?.jpgPath) items.push(i);
   }
-  if (items.length === 0) return null;
+  if (items.length <= 1) return null;
 
   return (
-    <div className="review-strip" role="list" aria-label="Recently reviewed">
+    <div className="review-strip" role="list" aria-label="Nearby frames">
       {items.map((i) => (
-        <Thumb key={i} index={i} onPick={() => goToReview(i)} />
+        <Thumb
+          key={i}
+          index={i}
+          current={i === reviewIndex}
+          onPick={() => i !== reviewIndex && goToReview(i)}
+        />
       ))}
     </div>
   );
 }
 
-function Thumb({ index, onPick }: { index: number; onPick: () => void }) {
+function Thumb({
+  index,
+  current,
+  onPick,
+}: {
+  index: number;
+  current: boolean;
+  onPick: () => void;
+}) {
   const { photos, decisions } = useAppState();
   const photo = photos[index];
   const path = photo?.jpgPath;
   const [url, setUrl] = useState<string | null>(
     path ? (thumbCache.get(path) ?? null) : null,
   );
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!path || url) return;
@@ -554,13 +574,19 @@ function Thumb({ index, onPick }: { index: number; onPick: () => void }) {
     };
   }, [path, url]);
 
+  // Keep the current frame scrolled into view as the window slides.
+  useEffect(() => {
+    if (current) btnRef.current?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [current]);
+
   const d = decisions[index];
   const tone =
     d?.kind === "accept" ? "is-accept" : d?.kind === "reject" ? "is-reject" : "";
 
   return (
     <button
-      className={`review-thumb ${tone}`}
+      ref={btnRef}
+      className={`review-thumb ${tone} ${current ? "is-current" : ""}`}
       role="listitem"
       onClick={onPick}
       title={`#${index + 1} ${photo?.baseName ?? ""}`}
