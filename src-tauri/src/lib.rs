@@ -1,5 +1,6 @@
 mod analyze;
 mod copy;
+mod exif;
 mod fs_ops;
 mod image;
 mod manifest;
@@ -19,7 +20,8 @@ pub fn run() {
             manifest::filter_by_manifest,
             image::read_image,
             copy::copy_accepted,
-            analyze::analyze_image
+            analyze::analyze_image,
+            exif::read_exif
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

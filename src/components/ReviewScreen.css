@@ -142,6 +142,33 @@
   text-decoration: line-through;
 }
 
+/* EXIF strip — shooting parameters, quiet and monospaced. */
+.review-exif {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--fc-s2) var(--fc-s3);
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+  color: var(--fc-text-muted);
+  min-height: 1.4em;
+}
+.review-exif__item {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--fc-line-hi);
+  background: var(--fc-ground-2);
+}
+.review-exif__lens {
+  color: var(--fc-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40ch;
+}
+
 .review-controls {
   display: flex;
   align-items: center;

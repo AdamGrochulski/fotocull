@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import { useAppState } from "../state/appStore";
 import { loadImageUrl } from "../lib/image";
 import { analyzeImage, type ImageAnalysis } from "../lib/analyze";
+import { readExif, type ExifInfo } from "../lib/exif";
 import { PhotoViewer, type PhotoViewerHandle } from "./PhotoViewer";
 import type { Photo } from "../types/photo";
 import "./ReviewScreen.css";
@@ -31,6 +32,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
   const [imgError, setImgError] = useState(false);
   const [analysis, setAnalysis] = useState<ImageAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [exif, setExif] = useState<ExifInfo | null>(null);
 
   // Sync inputs when the photo changes (also when stepping back to an edited one).
   useEffect(() => {
@@ -76,6 +78,19 @@ function ReviewCard({ photo }: { photo: Photo }) {
       .then((a) => !cancelled && setAnalysis(a))
       .catch(() => !cancelled && setAnalysis(null))
       .finally(() => !cancelled && setAnalyzing(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [photo.jpgPath]);
+
+  // EXIF shooting parameters (aperture, shutter, ISO, focal length, lens).
+  useEffect(() => {
+    let cancelled = false;
+    setExif(null);
+    if (!photo.jpgPath) return;
+    readExif(photo.jpgPath)
+      .then((e) => !cancelled && setExif(e))
+      .catch(() => !cancelled && setExif(null));
     return () => {
       cancelled = true;
     };
@@ -230,6 +245,8 @@ function ReviewCard({ photo }: { photo: Photo }) {
         </span>
       </div>
 
+      <ExifReadout exif={exif} />
+
       <div className="review-controls">
         <label className={`review-toggle ${hasArw ? "" : "is-disabled"}`}>
           <input
@@ -358,6 +375,32 @@ function QualityReadout({
         {analysis.exposureLabel}
       </span>
     </span>
+  );
+}
+
+/** Shooting parameters strip: aperture · shutter · ISO · focal length · lens. */
+function ExifReadout({ exif }: { exif: ExifInfo | null }) {
+  if (!exif) return null;
+  const items: string[] = [];
+  if (exif.aperture) items.push(exif.aperture);
+  if (exif.shutter) items.push(exif.shutter);
+  if (exif.iso) items.push(`ISO ${exif.iso}`);
+  if (exif.focalLength) items.push(exif.focalLength);
+  if (items.length === 0 && !exif.lens) return null;
+
+  return (
+    <div className="review-exif">
+      {items.map((t, i) => (
+        <span key={i} className="review-exif__item">
+          {t}
+        </span>
+      ))}
+      {exif.lens && (
+        <span className="review-exif__lens" title={exif.lens}>
+          {exif.lens}
+        </span>
+      )}
+    </div>
   );
 }
 
