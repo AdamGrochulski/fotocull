@@ -10,6 +10,7 @@ import { checkDir, pickDirectory } from "../lib/fs";
 import { scanSource, onScanProgress, type ScanProgress } from "../lib/scan";
 import {
   filterByManifest,
+  renamedTargets,
   onHashProgress,
   type HashProgress,
 } from "../lib/manifest";
@@ -34,6 +35,8 @@ const SESSIONS_FILE = "sessions.json";
 type StoredDecision = { kind: DecisionKind; includeArw: boolean; newName: string };
 interface SessionRecord {
   reviewed: Record<string, StoredDecision>;
+  /** Accumulated rename target names for autocomplete (survives across copies). */
+  names?: string[];
 }
 
 /** The source folder is OK when it exists, is a directory, and is readable. */
@@ -81,6 +84,8 @@ interface AppState {
   reviewIndex: number;
   /** Per-photo decisions, aligned to `photos` by index (undefined = not yet decided). */
   decisions: (Decision | undefined)[];
+  /** Rename autocomplete pool for the current destination (sorted, deduped). */
+  nameSuggestions: string[];
   /** Enter the review view starting at the first photo. */
   startReview: () => void;
   /** Record a decision for the current photo and advance to the next. */
@@ -105,6 +110,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<Store | null>(null);
   /** Reviewed hashes for the destination being worked on (accept/reject). */
   const [reviewed, setReviewed] = useState<Record<string, StoredDecision>>({});
+  /** Rename autocomplete pool (manifest history + this destination's sessions). */
+  const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
   const [sourceDir, setSourceDir] = useState<string | null>(null);
   const [destDir, setDestDir] = useState<string | null>(null);
   const [sourceStatus, setSourceStatus] = useState<DirStatus | null>(null);
@@ -179,13 +186,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  /** Persist the reviewed map for a destination (crash-safe skip-list + resume). */
-  async function persistReviewed(
+  /** Persist a destination's whole session record (skip-list + resume + names). */
+  async function persistSession(
     dest: string,
     map: Record<string, StoredDecision>,
+    names: string[],
   ) {
     try {
-      await sessions?.set(dest, { reviewed: map } satisfies SessionRecord);
+      await sessions?.set(dest, { reviewed: map, names } satisfies SessionRecord);
     } catch (err) {
       console.error("Failed to persist review progress:", err);
     }
@@ -238,9 +246,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Load this destination's review history: already-copied (manifest) and
       // previously-rejected photos are hidden; accepted-but-not-yet-copied ones
       // stay and get their decision restored later (resume).
-      const rev =
-        (await sessions?.get<SessionRecord>(destDir))?.reviewed ?? {};
+      const record = await sessions?.get<SessionRecord>(destDir);
+      const rev = record?.reviewed ?? {};
       setReviewed(rev);
+
+      // Rename autocomplete pool: manifest history (past copies) + names saved in
+      // this destination's session record. Merged, deduplicated, sorted.
+      const manifestNames = await renamedTargets(destDir).catch(() => []);
+      const pool = Array.from(
+        new Set([...(record?.names ?? []), ...manifestNames]),
+      ).sort((a, b) => a.localeCompare(b));
+      setNameSuggestions(pool);
 
       // Photos without a JPG (ARW only) stay — they can't be deduped by hash.
       const remaining: Photo[] = [];
@@ -322,7 +338,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         for (const [h, v] of Object.entries(prev)) {
           if (v.kind === "reject") next[h] = v;
         }
-        void persistReviewed(destDir, next);
+        void persistSession(destDir, next, nameSuggestions);
         return next;
       });
     } catch (err) {
@@ -345,19 +361,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
+    // Remember a new rename target for autocomplete (accept + non-empty name).
+    let names = nameSuggestions;
+    if (kind === "accept" && newName && !nameSuggestions.includes(newName)) {
+      names = [...nameSuggestions, newName].sort((a, b) => a.localeCompare(b));
+      setNameSuggestions(names);
+    }
+
     // Persist immediately, keyed by JPG hash, so a crash or early quit can't lose
     // the decision. Rejects become a permanent skip-list; accepts are resumable
     // until the copy moves them into the manifest.
     const photo = photos[reviewIndex];
     if (photo?.jpgHash && destDir) {
-      setReviewed((prev) => {
-        const next = {
-          ...prev,
-          [photo.jpgHash!]: { kind, includeArw: opts.includeArw, newName },
-        };
-        void persistReviewed(destDir, next);
-        return next;
-      });
+      const nextReviewed = {
+        ...reviewed,
+        [photo.jpgHash]: { kind, includeArw: opts.includeArw, newName },
+      };
+      setReviewed(nextReviewed);
+      void persistSession(destDir, nextReviewed, names);
     }
 
     // Advance (clamped at the end — the end state shows the review summary).
@@ -393,6 +414,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     resetToSetup,
     reviewIndex,
     decisions,
+    nameSuggestions,
     startReview,
     decideCurrent,
     reviewPrev,

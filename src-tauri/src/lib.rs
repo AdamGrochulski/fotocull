@@ -23,6 +23,7 @@ pub fn run() {
             fs_ops::open_folder,
             scan::scan_source,
             manifest::hash_jpg,
+            manifest::renamed_targets,
             manifest::filter_by_manifest,
             image::read_image,
             copy::copy_accepted,

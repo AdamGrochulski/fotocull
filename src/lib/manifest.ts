@@ -19,6 +19,12 @@ export async function hashJpg(path: string): Promise<string> {
   return invoke<string>("hash_jpg", { path });
 }
 
+/** Distinct target names previously used for renamed photos in this destination.
+ * Feeds the rename autocomplete. */
+export async function renamedTargets(destDir: string): Promise<string[]> {
+  return invoke<string[]>("renamed_targets", { destDir });
+}
+
 /**
  * Hash the given JPGs and mark which are already in the destination folder's manifest.
  */

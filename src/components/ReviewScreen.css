@@ -201,8 +201,42 @@
 }
 
 .review-rename {
+  position: relative;
   flex: 1;
   min-width: 220px;
+}
+.review-rename__input {
+  width: 100%;
+}
+
+/* Autocomplete dropdown — floats above the controls below it. */
+.review-suggest {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 4px);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--fc-panel);
+  border: 1px solid var(--fc-line-hi);
+  border-radius: var(--fc-r);
+  box-shadow: var(--fc-shadow);
+}
+.review-suggest__item {
+  padding: 6px 10px;
+  border-radius: var(--fc-r-sm, 6px);
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-sm);
+  color: var(--fc-text-muted);
+  cursor: pointer;
+}
+.review-suggest__item.is-active {
+  background: var(--fc-green-dim);
+  color: var(--fc-green-ink);
 }
 
 .review-actions {

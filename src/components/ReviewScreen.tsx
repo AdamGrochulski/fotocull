@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { useAppState } from "../state/appStore";
 import { loadImageUrl } from "../lib/image";
 import { analyzeImage, type ImageAnalysis } from "../lib/analyze";
@@ -19,8 +25,15 @@ export function ReviewScreen() {
 }
 
 function ReviewCard({ photo }: { photo: Photo }) {
-  const { photos, reviewIndex, decisions, decideCurrent, reviewPrev, backToResult } =
-    useAppState();
+  const {
+    photos,
+    reviewIndex,
+    decisions,
+    nameSuggestions,
+    decideCurrent,
+    reviewPrev,
+    backToResult,
+  } = useAppState();
 
   const existing = decisions[reviewIndex];
   const hasArw = !!photo.arwPath;
@@ -174,16 +187,6 @@ function ReviewCard({ photo }: { photo: Photo }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Enter in the rename field accepts; Escape drops focus back to the shortcuts.
-  function onRenameKey(e: ReactKeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      e.currentTarget.blur();
-      accept();
-    } else if (e.key === "Escape") {
-      e.currentTarget.blur();
-    }
-  }
 
   return (
     <div className="review">
@@ -259,13 +262,12 @@ function ReviewCard({ photo }: { photo: Photo }) {
           {!hasArw && <span className="review-toggle__hint">(no ARW)</span>}
         </label>
 
-        <input
-          className="fc-input review-rename"
-          type="text"
+        <RenameField
           value={newName}
+          onChange={setNewName}
+          suggestions={nameSuggestions}
+          onAccept={accept}
           placeholder={`Rename… (default: ${photo.baseName})`}
-          onChange={(e) => setNewName(e.currentTarget.value)}
-          onKeyDown={onRenameKey}
         />
       </div>
 
@@ -375,6 +377,132 @@ function QualityReadout({
         {analysis.exposureLabel}
       </span>
     </span>
+  );
+}
+
+/**
+ * Rename input with IDE-style autocomplete over previously used names.
+ * ↑/↓ move the highlight, Tab or Enter accepts the highlighted suggestion, a
+ * second Enter (dropdown closed) accepts the photo. Escape closes the list, then
+ * blurs. Suggestions are prefix matches of what's typed.
+ */
+function RenameField({
+  value,
+  onChange,
+  suggestions,
+  onAccept,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  suggestions: string[];
+  onAccept: () => void;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const matches = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    if (!q) return [];
+    return suggestions
+      .filter((s) => s.toLowerCase().startsWith(q) && s.toLowerCase() !== q)
+      .slice(0, 6);
+  }, [value, suggestions]);
+
+  const showList = open && matches.length > 0;
+
+  function choose(name: string) {
+    onChange(name);
+    setOpen(false);
+    setHighlight(-1);
+    inputRef.current?.focus();
+  }
+
+  function onKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (showList) {
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          setHighlight((h) => (h + 1) % matches.length);
+          return;
+        case "ArrowUp":
+          e.preventDefault();
+          setHighlight((h) => (h <= 0 ? matches.length - 1 : h - 1));
+          return;
+        case "Tab":
+          if (highlight >= 0) {
+            e.preventDefault();
+            choose(matches[highlight]);
+          }
+          return;
+        case "Enter":
+          if (highlight >= 0) {
+            e.preventDefault();
+            choose(matches[highlight]);
+            return;
+          }
+          break; // no highlight → fall through to accept the photo
+        case "Escape":
+          e.preventDefault();
+          setOpen(false);
+          setHighlight(-1);
+          return;
+      }
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur();
+      onAccept();
+    } else if (e.key === "Escape") {
+      e.currentTarget.blur();
+    }
+  }
+
+  return (
+    <div className="review-rename">
+      <input
+        ref={inputRef}
+        className="fc-input review-rename__input"
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        spellCheck={false}
+        role="combobox"
+        aria-expanded={showList}
+        aria-autocomplete="list"
+        onChange={(e) => {
+          onChange(e.currentTarget.value);
+          setOpen(true);
+          setHighlight(-1);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={onKeyDown}
+      />
+      {showList && (
+        <ul className="review-suggest" role="listbox">
+          {matches.map((name, i) => (
+            <li
+              key={name}
+              role="option"
+              aria-selected={i === highlight}
+              className={`review-suggest__item ${i === highlight ? "is-active" : ""}`}
+              // Mouse-down (not click) so it fires before the input's blur.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                choose(name);
+              }}
+              onMouseEnter={() => setHighlight(i)}
+            >
+              {name}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

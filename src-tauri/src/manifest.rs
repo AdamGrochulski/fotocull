@@ -94,6 +94,21 @@ pub fn hash_jpg(path: String) -> Result<String, String> {
     hash_file(&path)
 }
 
+/// Command: distinct target names previously assigned to renamed photos in this
+/// destination's manifest. Feeds the rename autocomplete so recurring names
+/// (people, sessions) come back as suggestions. Sorted, deduplicated.
+#[tauri::command]
+pub fn renamed_targets(dest_dir: String) -> Result<Vec<String>, String> {
+    let manifest = load_manifest(&dest_dir)?;
+    let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for entry in manifest.entries.values() {
+        if entry.renamed && !entry.target_name.is_empty() {
+            set.insert(entry.target_name.clone());
+        }
+    }
+    Ok(set.into_iter().collect())
+}
+
 /// Result of matching one JPG against the manifest.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
