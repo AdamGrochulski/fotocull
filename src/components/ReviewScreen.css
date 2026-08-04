@@ -16,6 +16,32 @@
   justify-content: space-between;
   gap: var(--fc-s4);
 }
+.review-top__right {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s2);
+}
+
+/* Select bar — shown while picking frames to compare. */
+.review-selectbar {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s3);
+  padding: var(--fc-s2) var(--fc-s3);
+  border: 1px solid var(--fc-green-dim);
+  border-radius: var(--fc-r);
+  background: color-mix(in srgb, var(--fc-green) 8%, var(--fc-panel));
+}
+.review-selectbar__hint {
+  color: var(--fc-text-muted);
+  font-size: var(--fc-fs-sm);
+}
+.review-selectbar__count {
+  margin-left: auto;
+  font-family: var(--fc-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--fc-green);
+}
 
 .review-counter {
   font-family: var(--fc-mono);
@@ -110,6 +136,133 @@
 .review-thumb.is-current {
   outline: 2px solid var(--fc-text);
   outline-offset: 1px;
+}
+/* While selecting for compare, picked frames get a green ring + check. */
+.review-strip.is-selecting .review-thumb {
+  cursor: copy;
+}
+.review-thumb.is-picked {
+  border-color: var(--fc-green);
+  box-shadow: 0 0 0 2px var(--fc-green) inset;
+}
+.review-thumb__pick {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 50%;
+  background: var(--fc-green);
+  color: var(--fc-green-ink);
+}
+
+/* --- compare grid --- */
+.compare {
+  gap: var(--fc-s3);
+}
+.compare-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fc-s3);
+}
+.compare-title {
+  font-size: var(--fc-fs-sm);
+  color: var(--fc-text-muted);
+}
+.compare-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: var(--fc-s3);
+  grid-auto-rows: 1fr;
+}
+.compare-grid[data-count="2"] {
+  grid-template-columns: 1fr 1fr;
+}
+.compare-grid[data-count="3"] {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.compare-grid[data-count="4"] {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.compare-cell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  gap: var(--fc-s2);
+  padding: var(--fc-s2);
+  border: 1px solid var(--fc-line);
+  border-radius: var(--fc-r);
+  background: var(--fc-panel);
+}
+.compare-cell.is-accept {
+  border-color: var(--fc-green);
+}
+.compare-cell.is-reject {
+  border-color: var(--fc-reject);
+}
+.compare-cell__stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* The inspector (.pv) flexes to fill; fallbacks (loading / ARW-only) too. */
+.compare-cell__stage > * {
+  min-height: 0;
+}
+.compare-cell__stage .review-loading,
+.compare-cell__stage .review-noimg {
+  flex: 1;
+}
+.compare-cell__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fc-s2);
+  flex-wrap: wrap;
+}
+.compare-cell__name {
+  font-family: var(--fc-mono);
+  font-weight: 600;
+  font-size: var(--fc-fs-xs);
+}
+.compare-badge {
+  font-style: normal;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.85em;
+}
+.compare-badge.is-accept {
+  background: var(--fc-green-dim);
+  color: var(--fc-green);
+}
+.compare-badge.is-reject {
+  background: color-mix(in srgb, var(--fc-reject) 22%, transparent);
+  color: var(--fc-reject);
+}
+.compare-cell__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s2);
+}
+.compare-cell__actions {
+  display: flex;
+  gap: var(--fc-s2);
+}
+.compare-cell__actions .fc-btn {
+  flex: 1;
 }
 .review-thumb__no {
   position: absolute;

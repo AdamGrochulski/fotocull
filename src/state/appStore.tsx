@@ -52,6 +52,12 @@ export function isDestValid(s: DirStatus | null): boolean {
 /** Application phase. */
 export type Phase = "setup" | "scanning" | "scanned" | "review" | "summary";
 
+/** Sub-mode within the review phase. */
+export type ReviewMode = "single" | "select" | "compare";
+
+/** Max photos side by side in compare (current + 3 more). */
+export const COMPARE_MAX = 4;
+
 interface AppState {
   sourceDir: string | null;
   destDir: string | null;
@@ -90,12 +96,34 @@ interface AppState {
   startReview: () => void;
   /** Record a decision for the current photo and advance to the next. */
   decideCurrent: (kind: DecisionKind, opts: { includeArw: boolean; newName: string }) => void;
+  /** Record a decision for a specific photo without advancing (compare mode). */
+  decideAt: (
+    index: number,
+    kind: DecisionKind,
+    opts: { includeArw: boolean; newName: string },
+  ) => void;
   /** Step back to the previous photo (to change a decision). */
   reviewPrev: () => void;
   /** Jump to a specific photo index (from the filmstrip). */
   goToReview: (index: number) => void;
   /** Return from review to the scan-result screen. */
   backToResult: () => void;
+
+  // --- compare sub-mode ---
+  /** Single photo, selecting frames to compare, or the compare grid. */
+  reviewMode: ReviewMode;
+  /** Photo indices chosen for comparison (includes the anchor). */
+  compareSet: number[];
+  /** Begin picking frames to compare (seeds with the current photo). */
+  startCompareSelect: () => void;
+  /** Add/remove a frame from the compare selection (capped at COMPARE_MAX). */
+  toggleComparePick: (index: number) => void;
+  /** Open the compare grid for the current selection. */
+  openCompare: () => void;
+  /** Leave selection/compare without advancing. */
+  cancelCompare: () => void;
+  /** Close the compare grid and advance to the next undecided frame. */
+  finishCompare: () => void;
 
   // --- copy (Stage 5) ---
   copyStage: "idle" | "copying" | "done";
@@ -130,6 +158,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [reviewIndex, setReviewIndex] = useState(0);
   const [decisions, setDecisions] = useState<(Decision | undefined)[]>([]);
+  const [reviewMode, setReviewMode] = useState<ReviewMode>("single");
+  const [compareSet, setCompareSet] = useState<number[]>([]);
 
   const [copyStage, setCopyStage] = useState<"idle" | "copying" | "done">("idle");
   const [copyProgress, setCopyProgress] = useState<CopyProgress | null>(null);
@@ -304,6 +334,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const firstUndecided = seeded.findIndex((d) => d === undefined);
     setDecisions(seeded);
     setReviewIndex(firstUndecided === -1 ? photos.length : firstUndecided);
+    setReviewMode("single");
+    setCompareSet([]);
     setCopyStage("idle");
     setCopyProgress(null);
     setCopyReport(null);
@@ -352,14 +384,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function decideCurrent(
+  function decideAt(
+    index: number,
     kind: DecisionKind,
     opts: { includeArw: boolean; newName: string },
   ) {
     const newName = opts.newName.trim();
     setDecisions((prev) => {
       const next = prev.slice();
-      next[reviewIndex] = { kind, includeArw: opts.includeArw, newName };
+      next[index] = { kind, includeArw: opts.includeArw, newName };
       return next;
     });
 
@@ -373,7 +406,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Persist immediately, keyed by JPG hash, so a crash or early quit can't lose
     // the decision. Rejects become a permanent skip-list; accepts are resumable
     // until the copy moves them into the manifest.
-    const photo = photos[reviewIndex];
+    const photo = photos[index];
     if (photo?.jpgHash && destDir) {
       const nextReviewed = {
         ...reviewed,
@@ -382,9 +415,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReviewed(nextReviewed);
       void persistSession(destDir, nextReviewed, names);
     }
+  }
 
+  function decideCurrent(
+    kind: DecisionKind,
+    opts: { includeArw: boolean; newName: string },
+  ) {
+    decideAt(reviewIndex, kind, opts);
     // Advance (clamped at the end — the end state shows the review summary).
     setReviewIndex((i) => Math.min(i + 1, photos.length));
+  }
+
+  // --- compare sub-mode ---
+  function startCompareSelect() {
+    setCompareSet([reviewIndex]);
+    setReviewMode("select");
+  }
+
+  function toggleComparePick(index: number) {
+    setCompareSet((prev) => {
+      if (prev.includes(index)) return prev.filter((i) => i !== index);
+      if (prev.length >= COMPARE_MAX) return prev; // capped
+      return [...prev, index];
+    });
+  }
+
+  function openCompare() {
+    if (compareSet.length >= 2) setReviewMode("compare");
+  }
+
+  function cancelCompare() {
+    setReviewMode("single");
+    setCompareSet([]);
+  }
+
+  function finishCompare() {
+    setReviewMode("single");
+    // Advance past the frames just compared to the next undecided one.
+    const from = compareSet.length ? Math.max(...compareSet) + 1 : reviewIndex;
+    let idx = from;
+    while (idx < photos.length && decisions[idx]) idx++;
+    setCompareSet([]);
+    setReviewIndex(Math.min(idx, photos.length));
   }
 
   function reviewPrev() {
@@ -423,9 +495,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     nameSuggestions,
     startReview,
     decideCurrent,
+    decideAt,
     reviewPrev,
     goToReview,
     backToResult,
+    reviewMode,
+    compareSet,
+    startCompareSelect,
+    toggleComparePick,
+    openCompare,
+    cancelCompare,
+    finishCompare,
     copyStage,
     copyProgress,
     copyReport,

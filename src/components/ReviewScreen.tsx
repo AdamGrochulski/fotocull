@@ -5,7 +5,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { useAppState } from "../state/appStore";
+import { useAppState, COMPARE_MAX } from "../state/appStore";
 import { loadImageUrl, loadThumbnailUrl } from "../lib/image";
 import { analyzeImage, type ImageAnalysis } from "../lib/analyze";
 import { readExif, type ExifInfo } from "../lib/exif";
@@ -18,7 +18,12 @@ import "./ReviewScreen.css";
 const thumbCache = new Map<string, string>();
 
 export function ReviewScreen() {
-  const { photos, reviewIndex } = useAppState();
+  const { photos, reviewIndex, reviewMode } = useAppState();
+
+  // The compare grid takes over the whole review area.
+  if (reviewMode === "compare") {
+    return <CompareView />;
+  }
 
   // Past the last photo → review is complete.
   if (reviewIndex >= photos.length) {
@@ -37,7 +42,13 @@ function ReviewCard({ photo }: { photo: Photo }) {
     decideCurrent,
     reviewPrev,
     backToResult,
+    reviewMode,
+    compareSet,
+    startCompareSelect,
+    openCompare,
+    cancelCompare,
   } = useAppState();
+  const selecting = reviewMode === "select";
 
   const existing = decisions[reviewIndex];
   const hasArw = !!photo.arwPath;
@@ -123,13 +134,20 @@ function ReviewCard({ photo }: { photo: Photo }) {
   }
 
   // Latest handlers kept in refs so the window listener (mounted once) never
-  // goes stale as includeArw / newName change.
-  const actions = useRef({ accept, reject, toggleArw: () => {}, hasArw });
+  // goes stale as includeArw / newName / mode change.
+  const actions = useRef({
+    accept,
+    reject,
+    toggleArw: () => {},
+    compare: () => {},
+    escape: () => {},
+  });
   actions.current = {
     accept,
     reject,
     toggleArw: () => hasArw && setIncludeArw((v) => !v),
-    hasArw,
+    compare: () => (selecting ? openCompare() : startCompareSelect()),
+    escape: () => selecting && cancelCompare(),
   };
 
   // Global shortcuts. Photo controls (P/F/1/±) drive the PhotoViewer imperatively.
@@ -159,6 +177,15 @@ function ReviewCard({ photo }: { photo: Photo }) {
         case "R":
           e.preventDefault();
           actions.current.toggleArw();
+          break;
+        case "c":
+        case "C":
+          e.preventDefault();
+          actions.current.compare();
+          break;
+        case "Escape":
+          e.preventDefault();
+          actions.current.escape();
           break;
         case "p":
         case "P":
@@ -203,14 +230,24 @@ function ReviewCard({ photo }: { photo: Photo }) {
           <span className="review-counter__sep">/</span>
           <span>{photos.length}</span>
         </div>
-        <button
-          className="fc-btn"
-          onClick={reviewPrev}
-          disabled={reviewIndex === 0}
-          title="Previous (Backspace)"
-        >
-          Undo
-        </button>
+        <span className="review-top__right">
+          <button
+            className="fc-btn"
+            onClick={startCompareSelect}
+            disabled={selecting}
+            title="Compare this frame with nearby ones (C)"
+          >
+            ⊞ Compare
+          </button>
+          <button
+            className="fc-btn"
+            onClick={reviewPrev}
+            disabled={reviewIndex === 0}
+            title="Previous (Backspace)"
+          >
+            Undo
+          </button>
+        </span>
       </header>
 
       <div className="review-progress">
@@ -238,6 +275,28 @@ function ReviewCard({ photo }: { photo: Photo }) {
             <br />
             Accepting will copy the RAW file.
           </div>
+        </div>
+      )}
+
+      {selecting && (
+        <div className="review-selectbar">
+          <span className="review-selectbar__hint">
+            Pick up to {COMPARE_MAX} frames to compare — click thumbnails below.
+          </span>
+          <span className="review-selectbar__count">
+            {compareSet.length}/{COMPARE_MAX}
+          </span>
+          <button className="fc-btn" onClick={cancelCompare}>
+            Cancel
+          </button>
+          <button
+            className="fc-btn fc-btn--primary"
+            onClick={openCompare}
+            disabled={compareSet.length < 2}
+            title={compareSet.length < 2 ? "Pick at least 2 frames" : "Open compare"}
+          >
+            Compare {compareSet.length} →
+          </button>
         </div>
       )}
 
@@ -277,20 +336,23 @@ function ReviewCard({ photo }: { photo: Photo }) {
         />
       </div>
 
-      <div className="review-actions">
-        <button className="fc-btn fc-btn--reject review-btn" onClick={reject}>
-          ← Reject
-        </button>
-        <button className="fc-btn fc-btn--primary review-btn" onClick={accept}>
-          Accept →
-        </button>
-      </div>
+      {!selecting && (
+        <div className="review-actions">
+          <button className="fc-btn fc-btn--reject review-btn" onClick={reject}>
+            ← Reject
+          </button>
+          <button className="fc-btn fc-btn--primary review-btn" onClick={accept}>
+            Accept →
+          </button>
+        </div>
+      )}
 
       <div className="review-keys" aria-hidden>
         <span><kbd>←</kbd> reject</span>
         <span><kbd>→</kbd>/<kbd>Space</kbd> accept</span>
         <span><kbd>Backspace</kbd>/<kbd>U</kbd> undo</span>
         <span><kbd>R</kbd> ARW</span>
+        <span><kbd>C</kbd> compare</span>
         <span><kbd>P</kbd> peaking</span>
         <span><kbd>F</kbd> fit</span>
         <span><kbd>1</kbd> 100%</span>
@@ -515,13 +577,18 @@ function RenameField({
 /** How many frames each side of the current one the filmstrip shows. */
 const STRIP_RADIUS = 4;
 
-/** Filmstrip of nearby frames (previous and next). Click any to jump to it
- * without making a decision — scrub a burst freely before choosing. */
+/** Filmstrip of nearby frames (previous and next). In single mode, click any to
+ * jump to it without a decision (scrub a burst). In select mode, click to pick
+ * frames for comparison. In select mode the window widens so more frames of a
+ * burst are reachable. */
 function Filmstrip() {
-  const { photos, reviewIndex, goToReview } = useAppState();
+  const { photos, reviewIndex, reviewMode, compareSet, goToReview, toggleComparePick } =
+    useAppState();
+  const selecting = reviewMode === "select";
 
-  const start = Math.max(0, reviewIndex - STRIP_RADIUS);
-  const end = Math.min(photos.length - 1, reviewIndex + STRIP_RADIUS);
+  const radius = selecting ? STRIP_RADIUS * 2 : STRIP_RADIUS;
+  const start = Math.max(0, reviewIndex - radius);
+  const end = Math.min(photos.length - 1, reviewIndex + radius);
   const items: number[] = [];
   for (let i = start; i <= end; i++) {
     if (photos[i]?.jpgPath) items.push(i);
@@ -529,13 +596,20 @@ function Filmstrip() {
   if (items.length <= 1) return null;
 
   return (
-    <div className="review-strip" role="list" aria-label="Nearby frames">
+    <div
+      className={`review-strip ${selecting ? "is-selecting" : ""}`}
+      role="list"
+      aria-label="Nearby frames"
+    >
       {items.map((i) => (
         <Thumb
           key={i}
           index={i}
           current={i === reviewIndex}
-          onPick={() => i !== reviewIndex && goToReview(i)}
+          picked={selecting && compareSet.includes(i)}
+          onPick={() =>
+            selecting ? toggleComparePick(i) : i !== reviewIndex && goToReview(i)
+          }
         />
       ))}
     </div>
@@ -545,10 +619,12 @@ function Filmstrip() {
 function Thumb({
   index,
   current,
+  picked,
   onPick,
 }: {
   index: number;
   current: boolean;
+  picked: boolean;
   onPick: () => void;
 }) {
   const { photos, decisions } = useAppState();
@@ -586,8 +662,11 @@ function Thumb({
   return (
     <button
       ref={btnRef}
-      className={`review-thumb ${tone} ${current ? "is-current" : ""}`}
+      className={`review-thumb ${tone} ${current ? "is-current" : ""} ${
+        picked ? "is-picked" : ""
+      }`}
       role="listitem"
+      aria-pressed={picked}
       onClick={onPick}
       title={`#${index + 1} ${photo?.baseName ?? ""}`}
     >
@@ -597,6 +676,7 @@ function Thumb({
         <span className="review-thumb__ph" />
       )}
       <span className="review-thumb__no">{index + 1}</span>
+      {picked && <span className="review-thumb__pick">✓</span>}
     </button>
   );
 }
@@ -623,6 +703,165 @@ function ExifReadout({ exif }: { exif: ExifInfo | null }) {
           {exif.lens}
         </span>
       )}
+    </div>
+  );
+}
+
+/** Side-by-side compare grid. Each cell is a full mini-inspector (zoom/pan/
+ * peaking) with its own ARW toggle, rename and accept/reject. Decisions apply to
+ * that specific frame and don't advance the main review. */
+function CompareView() {
+  const { compareSet, cancelCompare, finishCompare } = useAppState();
+  const indices = [...compareSet].sort((a, b) => a - b);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancelCompare();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cancelCompare]);
+
+  return (
+    <div className="review compare">
+      <header className="compare-top">
+        <button className="fc-btn" onClick={cancelCompare} title="Back (Esc)">
+          ← Back
+        </button>
+        <span className="compare-title">
+          Comparing {indices.length} frames — decide each
+        </span>
+        <button className="fc-btn fc-btn--primary" onClick={finishCompare}>
+          Done →
+        </button>
+      </header>
+
+      <div className="compare-grid" data-count={indices.length}>
+        {indices.map((i) => (
+          <CompareCell key={i} index={i} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CompareCell({ index }: { index: number }) {
+  const { photos, decisions, nameSuggestions, decideAt } = useAppState();
+  const photo = photos[index];
+  const hasArw = !!photo?.arwPath;
+  const hasJpg = !!photo?.jpgPath;
+  const existing = decisions[index];
+
+  const [includeArw, setIncludeArw] = useState(existing?.includeArw ?? false);
+  const [newName, setNewName] = useState(existing?.newName ?? "");
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
+  const [imgError, setImgError] = useState(false);
+  const [exif, setExif] = useState<ExifInfo | null>(null);
+  const viewerRef = useRef<PhotoViewerHandle>(null);
+
+  useEffect(() => {
+    let url: string | null = null;
+    let cancelled = false;
+    setImgUrl(null);
+    setImgError(false);
+    if (photo?.jpgPath) {
+      loadImageUrl(photo.jpgPath)
+        .then((u) => {
+          if (cancelled) {
+            URL.revokeObjectURL(u);
+            return;
+          }
+          url = u;
+          setImgUrl(u);
+        })
+        .catch(() => !cancelled && setImgError(true));
+    }
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [photo?.jpgPath]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setExif(null);
+    if (!photo?.jpgPath) return;
+    readExif(photo.jpgPath)
+      .then((e) => !cancelled && setExif(e))
+      .catch(() => !cancelled && setExif(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [photo?.jpgPath]);
+
+  const decision = decisions[index];
+  function accept() {
+    decideAt(index, "accept", { includeArw, newName });
+  }
+  function reject() {
+    decideAt(index, "reject", { includeArw, newName });
+  }
+
+  return (
+    <div className={`compare-cell ${decision ? `is-${decision.kind}` : ""}`}>
+      <div className="compare-cell__stage">
+        {hasJpg ? (
+          imgError ? (
+            <div className="review-noimg">Could not load JPG.</div>
+          ) : imgUrl ? (
+            <PhotoViewer ref={viewerRef} src={imgUrl} label={photo.baseName} />
+          ) : (
+            <div className="review-loading">
+              <div className="scan-spinner" aria-hidden />
+            </div>
+          )
+        ) : (
+          <div className="review-noimg">ARW only — no JPG preview.</div>
+        )}
+      </div>
+
+      <div className="compare-cell__bar">
+        <span className="compare-cell__name">
+          #{index + 1} {photo?.baseName}
+          {decision && (
+            <em className={`compare-badge is-${decision.kind}`}>
+              {decision.kind === "accept" ? "Accepted" : "Rejected"}
+            </em>
+          )}
+        </span>
+        <ExifReadout exif={exif} />
+      </div>
+
+      <div className="compare-cell__controls">
+        <label className={`review-toggle ${hasArw ? "" : "is-disabled"}`}>
+          <input
+            type="checkbox"
+            checked={hasArw ? includeArw : false}
+            disabled={!hasArw}
+            onChange={(e) => setIncludeArw(e.currentTarget.checked)}
+          />
+          <span>ARW</span>
+        </label>
+        <RenameField
+          value={newName}
+          onChange={setNewName}
+          suggestions={nameSuggestions}
+          onAccept={accept}
+          placeholder={`Rename… (${photo?.baseName ?? ""})`}
+        />
+      </div>
+
+      <div className="compare-cell__actions">
+        <button className="fc-btn fc-btn--reject" onClick={reject}>
+          Reject
+        </button>
+        <button className="fc-btn fc-btn--primary" onClick={accept}>
+          Accept
+        </button>
+      </div>
     </div>
   );
 }
