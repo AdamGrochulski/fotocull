@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "fotocull",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.octoone.fotocull",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -31,7 +31,7 @@
     "category": "Photography",
     "shortDescription": "Fast photo culling (JPG+ARW) from an SD card",
     "longDescription": "fotocull is a fast, keyboard-driven culling tool for camera photos. Scan an SD card, review JPGs Tinder-style, keep or reject, optionally rename, and copy accepted shots (with their ARW companions) to a destination folder. Already-copied photos are skipped by content hash, so re-runs only show what's new.",
-    "copyright": "Copyright © 2026 octoone",
+    "copyright": "Copyright \u00a9 2026 octoone",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
