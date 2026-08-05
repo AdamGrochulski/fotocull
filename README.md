@@ -26,9 +26,11 @@ RAW companions, land in a clean folder. **Nothing on the card is ever touched.**
 Built for a **Sony A6000** workflow, where every frame is a pair — a RAW `.ARW`
 and a `.JPG` — but it works with any folder of JPG/ARW files.
 
+<!-- TODO screenshot: review screen — photo + filmstrip + EXIF + Reject/Accept
 <div align="center">
   <img src="assets/hero.png" alt="Reviewing a shoot in fotocull" width="900" />
 </div>
+-->
 
 ---
 
@@ -59,9 +61,11 @@ filmstrip, and inspect them side by side — each pane is a full zoom / pan /
 peaking inspector with its own EXIF, ARW toggle and rename. Keep the sharpest,
 drop the rest, all in one screen.
 
+<!-- TODO screenshot: compare mode — 3–4 frames side by side, one zoomed
 <div align="center">
   <img src="assets/compare.png" alt="Side-by-side compare mode" width="900" />
 </div>
+-->
 
 ---
 
@@ -79,9 +83,11 @@ a hidden `.fotocull/manifest.json` in the destination.
 
 ## Inspect before you commit
 
+<!-- TODO screenshot: zoom at 100% with focus peaking ON (green edges)
 <div align="center">
   <img src="assets/inspect.png" alt="Zoom and focus peaking" width="900" />
 </div>
+-->
 
 - **Zoom & pan** on a Canvas 2D stage — cursor-anchored wheel, drag to pan, Fit / 100%.
 - **Focus peaking** — a Sobel gradient overlay paints sharp edges green, so you
