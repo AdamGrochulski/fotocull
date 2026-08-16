@@ -363,13 +363,25 @@ function ReviewCard({ photo }: { photo: Photo }) {
 }
 
 function ReviewComplete() {
-  const { photos, destDir, decisions, reviewPrev, copyStage, copyProgress, runCopy } =
-    useAppState();
+  const {
+    photos,
+    videos,
+    destDir,
+    decisions,
+    videoDecisions,
+    reviewPrev,
+    copyStage,
+    copyProgress,
+    runCopy,
+  } = useAppState();
 
   const accepted = decisions.filter((d) => d?.kind === "accept").length;
   const rejected = decisions.filter((d) => d?.kind === "reject").length;
   const withArw = decisions.filter((d) => d?.kind === "accept" && d.includeArw).length;
   const renamed = decisions.filter((d) => d?.kind === "accept" && d.newName).length;
+  const videosAccepted = videoDecisions.filter((d) => d?.kind === "accept").length;
+  const totalAccepted = accepted + videosAccepted;
+  const hasVideos = videos.length > 0;
 
   return (
     <div className="review review--done">
@@ -396,12 +408,17 @@ function ReviewComplete() {
             <button
               className="fc-btn fc-btn--primary"
               onClick={runCopy}
-              disabled={accepted === 0}
-              title={accepted === 0 ? "Nothing accepted to copy" : "Copy accepted"}
+              disabled={totalAccepted === 0}
+              title={totalAccepted === 0 ? "Nothing accepted to copy" : "Copy accepted"}
             >
-              Copy {accepted} accepted →
+              Copy {totalAccepted} accepted →
             </button>
           </div>
+          {hasVideos && videosAccepted > 0 && (
+            <p className="review-note">
+              Includes {videosAccepted} accepted video(s) from the Videos tab.
+            </p>
+          )}
         </>
       )}
 
@@ -409,7 +426,7 @@ function ReviewComplete() {
         <div className="review-copying">
           <div className="scan-spinner" aria-hidden />
           <span>
-            Copying {copyProgress?.done ?? 0} / {copyProgress?.total ?? accepted}…
+            Copying {copyProgress?.done ?? 0} / {copyProgress?.total ?? totalAccepted}…
           </span>
         </div>
       )}
@@ -454,7 +471,7 @@ function QualityReadout({
  * second Enter (dropdown closed) accepts the photo. Escape closes the list, then
  * blurs. Suggestions are prefix matches of what's typed.
  */
-function RenameField({
+export function RenameField({
   value,
   onChange,
   suggestions,

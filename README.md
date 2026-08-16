@@ -24,7 +24,16 @@ Point it at a card. Swipe through the JPGs — keep or skip. The keepers, and th
 RAW companions, land in a clean folder. **Nothing on the card is ever touched.**
 
 Built for a **Sony A6000** workflow, where every frame is a pair — a RAW `.ARW`
-and a `.JPG` — but it works with any folder of JPG/ARW files.
+and a `.JPG` — plus the odd `.MP4` clip — but it works with any folder of
+JPG/ARW/MP4 files.
+
+> **macOS first launch.** The installers aren't code-signed yet, so Gatekeeper —
+> especially on Apple Silicon — may refuse the app with *"fotocull is damaged"*.
+> Move `fotocull.app` to `/Applications`, then clear the quarantine flag once:
+> ```bash
+> xattr -cr /Applications/fotocull.app
+> ```
+> and open it normally. (Tracked under *What's next → signed installers*.)
 
 <!-- TODO screenshot: review screen — photo + filmstrip + EXIF + Reject/Accept
 <div align="center">
@@ -101,15 +110,26 @@ a hidden `.fotocull/manifest.json` in the destination.
 
 ---
 
+## Cull video too
+
+Cameras drop `.MP4` clips on the same card. fotocull picks them up and gives them
+a **Videos** tab beside the photos — same keep/reject/rename flow, an inline
+player to scrub each clip, and the same content-hash skip-list so a copied clip
+never shows up twice. Accepted clips land in `video/`.
+
+---
+
 ## Where your keepers go
 
 ```
 DESTINATION/
 ├── jpg/          # default-named JPGs
 ├── raw/          # default-named ARWs
-└── unique/       # renamed photos
+├── video/        # default-named MP4 clips
+└── unique/       # renamed items
     ├── jpg/
-    └── raw/
+    ├── raw/
+    └── video/
 ```
 
 Rename a photo and its pair moves to `unique/`. Name clashes get a shared
@@ -155,6 +175,7 @@ straight to GitHub Releases.
 - [x] Keyboard-first review
 - [x] Side-by-side compare
 - [x] Session resume + permanent reject skip-list
+- [x] Video (MP4) review tab
 - [ ] Signed installers (SmartScreen / Gatekeeper clean)
 - [ ] Optional ARW-decoded preview
 

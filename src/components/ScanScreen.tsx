@@ -15,20 +15,27 @@ export function ScanScreen() {
   const {
     phase,
     photos,
+    videos,
     scanProgress,
     scanStage,
     hashProgress,
     filteredOut,
+    filteredOutVideos,
     resetToSetup,
     startReview,
   } = useAppState();
 
   if (phase === "scanning") {
+    const hashing = scanStage === "hash" || scanStage === "vhash";
     return (
       <div className="scan-screen">
-        <h2>{scanStage === "hash" ? "Checking manifest…" : "Scanning media…"}</h2>
+        <h2>{hashing ? "Checking manifest…" : "Scanning media…"}</h2>
         <div className="scan-progress">
-          {scanStage === "hash" ? (
+          {scanStage === "vhash" ? (
+            <div>
+              Hashing video: {hashProgress?.hashed ?? 0} / {hashProgress?.total ?? 0}
+            </div>
+          ) : scanStage === "hash" ? (
             <div>
               Hashing JPG: {hashProgress?.hashed ?? 0} / {hashProgress?.total ?? 0}
             </div>
@@ -57,7 +64,7 @@ export function ScanScreen() {
           <button className="fc-btn" onClick={resetToSetup}>
             ← Change folders
           </button>
-          {photos.length > 0 && (
+          {(photos.length > 0 || videos.length > 0) && (
             <button className="fc-btn fc-btn--primary" onClick={startReview}>
               Start review →
             </button>
@@ -65,10 +72,11 @@ export function ScanScreen() {
         </div>
       </header>
 
-      {filteredOut > 0 && (
+      {(filteredOut > 0 || filteredOutVideos > 0) && (
         <div className="scan-filtered">
-          Skipped {filteredOut} photo(s) — already handled earlier (copied or
-          rejected), matched by JPG hash.
+          Skipped {filteredOut} photo(s)
+          {filteredOutVideos > 0 && ` and ${filteredOutVideos} video(s)`} — already
+          handled earlier (copied or rejected), matched by content hash.
         </div>
       )}
 
@@ -77,39 +85,69 @@ export function ScanScreen() {
         <Stat label="JPG+ARW pairs" value={pairs} />
         <Stat label="JPG only" value={jpgOnly} />
         <Stat label="ARW only" value={arwOnly} />
+        <Stat label="Videos (MP4)" value={videos.length} />
       </div>
 
-      {photos.length === 0 ? (
+      {photos.length === 0 && videos.length === 0 ? (
         <p className="scan-empty">
-          {filteredOut > 0
-            ? "Nothing new — every photo here was already copied or rejected in an earlier session."
-            : "No JPG/ARW files found in the selected folder."}
+          {filteredOut > 0 || filteredOutVideos > 0
+            ? "Nothing new — every item here was already copied or rejected in an earlier session."
+            : "No JPG/ARW/MP4 files found in the selected folder."}
         </p>
       ) : (
-        <div className="scan-list">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>JPG</th>
-                <th>ARW</th>
-                <th>Folder</th>
-              </tr>
-            </thead>
-            <tbody>
-              {photos.map((p) => (
-                <tr key={p.baseName + p.sourceDir}>
-                  <td>{p.baseName}</td>
-                  <td>{p.jpgPath ? "✓" : "—"}</td>
-                  <td>{p.arwPath ? "✓" : "—"}</td>
-                  <td className="scan-list__dir" title={p.sourceDir}>
-                    {baseName(p.sourceDir)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {photos.length > 0 && (
+            <div className="scan-list">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>JPG</th>
+                    <th>ARW</th>
+                    <th>Folder</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {photos.map((p) => (
+                    <tr key={p.baseName + p.sourceDir}>
+                      <td>{p.baseName}</td>
+                      <td>{p.jpgPath ? "✓" : "—"}</td>
+                      <td>{p.arwPath ? "✓" : "—"}</td>
+                      <td className="scan-list__dir" title={p.sourceDir}>
+                        {baseName(p.sourceDir)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {videos.length > 0 && (
+            <div className="scan-list">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Video</th>
+                    <th>MP4</th>
+                    <th>Folder</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {videos.map((v) => (
+                    <tr key={v.path}>
+                      <td>{v.baseName}</td>
+                      <td>✓</td>
+                      <td className="scan-list__dir" title={v.sourceDir}>
+                        {baseName(v.sourceDir)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

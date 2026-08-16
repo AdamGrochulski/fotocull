@@ -23,6 +23,17 @@ pub struct ManifestEntry {
     pub date: String,
 }
 
+/// Manifest entry for a video clip. Keyed by the SHA-256 of the MP4 file.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoEntry {
+    pub original_name: String,
+    pub target_name: String,
+    pub target_path: String,
+    pub renamed: bool,
+    pub date: String,
+}
+
 /// Contents of `.fotocull/manifest.json`.
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +43,9 @@ pub struct Manifest {
     /// JPG hash → entry.
     #[serde(default)]
     pub entries: HashMap<String, ManifestEntry>,
+    /// MP4 hash → entry. Videos are deduped independently of photos.
+    #[serde(default)]
+    pub videos: HashMap<String, VideoEntry>,
 }
 
 /// Path to the manifest file inside the destination folder.
@@ -106,6 +120,12 @@ pub fn renamed_targets(dest_dir: String) -> Result<Vec<String>, String> {
             set.insert(entry.target_name.clone());
         }
     }
+    // Video rename history feeds the same autocomplete pool.
+    for entry in manifest.videos.values() {
+        if entry.renamed && !entry.target_name.is_empty() {
+            set.insert(entry.target_name.clone());
+        }
+    }
     Ok(set.into_iter().collect())
 }
 
@@ -173,4 +193,48 @@ pub async fn filter_by_manifest(
     })
     .await
     .map_err(|e| format!("Hashing task aborted: {e}"))?
+}
+
+/// Hash the given MP4 files and mark which are already in the destination
+/// folder's video manifest. Mirrors `filter_by_manifest` but for videos, so
+/// already-copied clips are hidden on a rescan. Progress via `vhash://progress`.
+#[tauri::command]
+pub async fn filter_videos_by_manifest(
+    app: AppHandle,
+    dest_dir: String,
+    video_paths: Vec<String>,
+) -> Result<Vec<HashResult>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let manifest = load_manifest(&dest_dir)?;
+        let total = video_paths.len();
+        let done = AtomicUsize::new(0);
+
+        // Hashing a multi-GB clip is slow; spread the files across cores.
+        let results: Vec<Result<HashResult, String>> = video_paths
+            .par_iter()
+            .map(|path| {
+                let hash = hash_file(path)?;
+                let already_copied = manifest.videos.contains_key(&hash);
+
+                let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+                if n % 2 == 0 || n == total {
+                    let _ = app.emit("vhash://progress", HashProgress { hashed: n, total });
+                }
+
+                Ok(HashResult {
+                    path: path.clone(),
+                    hash,
+                    already_copied,
+                })
+            })
+            .collect();
+
+        let mut out = Vec::with_capacity(total);
+        for r in results {
+            out.push(r?);
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| format!("Video hashing task aborted: {e}"))?
 }

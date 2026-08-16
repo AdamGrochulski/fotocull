@@ -3,14 +3,27 @@ import { openFolder } from "../lib/fs";
 import "./SummaryScreen.css";
 
 export function SummaryScreen() {
-  const { destDir, decisions, copyReport, resetToSetup, startScan } = useAppState();
+  const {
+    destDir,
+    decisions,
+    videoDecisions,
+    copyReport,
+    videoReport,
+    resetToSetup,
+    startScan,
+  } = useAppState();
 
   const accepted = decisions.filter((d) => d?.kind === "accept").length;
   const rejected = decisions.filter((d) => d?.kind === "reject").length;
   const withArw = decisions.filter((d) => d?.kind === "accept" && d.includeArw).length;
   const renamed = decisions.filter((d) => d?.kind === "accept" && d.newName).length;
 
-  const errors = copyReport?.errors ?? [];
+  const videosAccepted = videoDecisions.filter((d) => d?.kind === "accept").length;
+  const hadVideos = videoDecisions.some((d) => d !== undefined);
+
+  const totalCopied = (copyReport?.copied ?? 0) + (videoReport?.copied ?? 0);
+  const totalFiles = (copyReport?.filesCopied ?? 0) + (videoReport?.filesCopied ?? 0);
+  const errors = [...(copyReport?.errors ?? []), ...(videoReport?.errors ?? [])];
 
   return (
     <div className="summary">
@@ -20,8 +33,7 @@ export function SummaryScreen() {
         </div>
         <h1>Session complete</h1>
         <p className="summary-sub">
-          Copied {copyReport?.copied ?? 0} photo(s) — {copyReport?.filesCopied ?? 0}{" "}
-          file(s).
+          Copied {totalCopied} item(s) — {totalFiles} file(s).
         </p>
       </header>
 
@@ -30,6 +42,7 @@ export function SummaryScreen() {
         <Stat label="Rejected" value={rejected} />
         <Stat label="With ARW" value={withArw} />
         <Stat label="Renamed" value={renamed} />
+        {hadVideos && <Stat label="Videos kept" value={videosAccepted} />}
       </div>
 
       <div className="summary-dest">

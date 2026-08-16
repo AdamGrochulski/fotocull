@@ -1,0 +1,75 @@
+/* Photos | Videos shell — a fixed-height column: tab bar on top, review below. */
+.media-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.media-shell__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Nested review fills the body (standalone it uses 100vh). */
+.media-shell__body .review {
+  height: 100%;
+}
+
+.media-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--fc-s2);
+  padding: var(--fc-s2) var(--fc-s4);
+  border-bottom: 1px solid var(--fc-line);
+  background: var(--fc-ground-2);
+}
+
+.media-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fc-s2);
+  font-family: var(--fc-sans);
+  font-weight: 600;
+  font-size: var(--fc-fs-sm);
+  padding: 0.5em 1em;
+  border-radius: var(--fc-r);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fc-text-muted);
+  cursor: pointer;
+  transition: color var(--fc-t), background var(--fc-t), border-color var(--fc-t);
+}
+.media-tab:not(:disabled):hover {
+  color: var(--fc-text);
+  border-color: var(--fc-line-hi);
+}
+.media-tab.is-active {
+  color: var(--fc-green);
+  background: rgba(61, 220, 132, 0.1);
+  border-color: color-mix(in srgb, var(--fc-green) 40%, transparent);
+}
+.media-tab:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.media-tab__icon {
+  font-size: 1.05em;
+}
+.media-tab__count {
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+  padding: 0.1em 0.5em;
+  border-radius: var(--fc-r-pill);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--fc-text);
+  font-variant-numeric: tabular-nums;
+}
+.media-tab.is-active .media-tab__count {
+  background: rgba(61, 220, 132, 0.2);
+  color: var(--fc-green);
+}
+.media-tab__left {
+  font-size: var(--fc-fs-xs);
+  color: var(--fc-text-faint);
+}

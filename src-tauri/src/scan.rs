@@ -20,6 +20,26 @@ pub struct Photo {
     pub source_dir: String,
 }
 
+/// One video clip (standalone `.mp4` — no pairing, no ARW companion).
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Video {
+    /// Base name without extension, e.g. "MAH00001".
+    pub base_name: String,
+    /// Full path to the MP4 file.
+    pub path: String,
+    /// Directory the clip lives in.
+    pub source_dir: String,
+}
+
+/// Result of a single source walk: photo pairs and video clips.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanResult {
+    pub photos: Vec<Photo>,
+    pub videos: Vec<Video>,
+}
+
 /// Scan progress sent to the frontend via the `scan://progress` event.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -43,17 +63,17 @@ fn parent_dir(p: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// Recursively scan the source directory. Collects .jpg/.jpeg/.arw files
-/// (case-insensitive), grouped by base name. Read-only — changes nothing.
+/// Recursively scan the source directory. Collects .jpg/.jpeg/.arw photo pairs
+/// and standalone .mp4 clips (case-insensitive). Read-only — changes nothing.
 /// Reports progress via `scan://progress` events.
 #[tauri::command]
-pub async fn scan_source(app: AppHandle, path: String) -> Result<Vec<Photo>, String> {
+pub async fn scan_source(app: AppHandle, path: String) -> Result<ScanResult, String> {
     tauri::async_runtime::spawn_blocking(move || scan_blocking(&app, &path))
         .await
         .map_err(|e| format!("Scan task aborted: {e}"))?
 }
 
-fn scan_blocking(app: &AppHandle, root: &str) -> Result<Vec<Photo>, String> {
+fn scan_blocking(app: &AppHandle, root: &str) -> Result<ScanResult, String> {
     let root_path = Path::new(root);
     if !root_path.is_dir() {
         return Err(format!("Source folder does not exist: {root}"));
@@ -61,6 +81,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<Vec<Photo>, String> {
 
     // Map key: base name (stem) — pairing is independent of directory.
     let mut entries: HashMap<String, Entry> = HashMap::new();
+    let mut videos: Vec<Video> = Vec::new();
     let mut files_scanned: usize = 0;
 
     for dent in WalkDir::new(root_path)
@@ -96,6 +117,13 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<Vec<Photo>, String> {
                 let e = entries.entry(stem).or_default();
                 e.arw_path = Some(full);
                 e.arw_dir = Some(dir);
+            }
+            "mp4" => {
+                videos.push(Video {
+                    base_name: stem,
+                    path: full,
+                    source_dir: dir,
+                });
             }
             _ => {}
         }
@@ -134,6 +162,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<Vec<Photo>, String> {
 
     // Sort by base name — the camera's sequential order.
     photos.sort_by(|a, b| a.base_name.cmp(&b.base_name));
+    videos.sort_by(|a, b| a.base_name.cmp(&b.base_name));
 
-    Ok(photos)
+    Ok(ScanResult { photos, videos })
 }

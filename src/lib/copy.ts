@@ -24,12 +24,28 @@ export interface CopyProgress {
   total: number;
 }
 
+/** One accepted video clip to copy (sent to the backend). */
+export interface VideoJob {
+  baseName: string;
+  path: string;
+  hash?: string;
+  newName?: string;
+}
+
 /** Copy accepted photos into the destination folder. */
 export async function copyAccepted(
   destDir: string,
   jobs: CopyJob[],
 ): Promise<CopyReport> {
   return invoke<CopyReport>("copy_accepted", { destDir, jobs });
+}
+
+/** Copy accepted video clips into the destination folder (video/ or unique/video/). */
+export async function copyVideos(
+  destDir: string,
+  jobs: VideoJob[],
+): Promise<CopyReport> {
+  return invoke<CopyReport>("copy_videos", { destDir, jobs });
 }
 
 /** Subscribe to copy progress. Returns an unsubscribe function. */

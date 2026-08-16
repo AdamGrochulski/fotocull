@@ -1,6 +1,6 @@
 use std::path::Path;
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 /// Directory status returned to the frontend after validating a selection.
@@ -63,4 +63,14 @@ pub fn open_folder(app: AppHandle, path: String) -> Result<(), String> {
     app.opener()
         .open_path(path, None::<&str>)
         .map_err(|e| format!("Cannot open folder: {e}"))
+}
+
+/// Grant the asset protocol read access to a directory (recursively), so the
+/// frontend can stream video files from it via `convertFileSrc`. Called with the
+/// source folder before video playback. Read-only — the scope only permits reads.
+#[tauri::command]
+pub fn allow_media_dir(app: AppHandle, path: String) -> Result<(), String> {
+    app.asset_protocol_scope()
+        .allow_directory(&path, true)
+        .map_err(|e| format!("Cannot grant media access: {e}"))
 }

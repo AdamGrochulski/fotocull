@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
-use crate::manifest::{load_manifest, save_manifest, ManifestEntry};
+use crate::manifest::{load_manifest, save_manifest, ManifestEntry, VideoEntry};
 
 /// One accepted photo to copy, sent from the frontend.
 #[derive(Deserialize)]
@@ -207,4 +207,116 @@ fn copy_one(
     }
 
     Ok(files)
+}
+
+/// One accepted video clip to copy, sent from the frontend.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoJob {
+    pub base_name: String,
+    pub path: String,
+    /// SHA-256 of the MP4 (for manifest dedup).
+    pub hash: Option<String>,
+    /// New base name, or empty/None to keep the original.
+    pub new_name: Option<String>,
+}
+
+/// Copy accepted video clips into the destination folder. Default-named clips go
+/// to `video/`, renamed ones to `unique/video/`. Never modifies the source.
+/// Updates the manifest's `videos` map atomically after each clip.
+#[tauri::command]
+pub async fn copy_videos(
+    app: AppHandle,
+    dest_dir: String,
+    jobs: Vec<VideoJob>,
+) -> Result<CopyReport, String> {
+    tauri::async_runtime::spawn_blocking(move || copy_videos_blocking(&app, &dest_dir, jobs))
+        .await
+        .map_err(|e| format!("Video copy task aborted: {e}"))?
+}
+
+fn copy_videos_blocking(
+    app: &AppHandle,
+    dest_dir: &str,
+    jobs: Vec<VideoJob>,
+) -> Result<CopyReport, String> {
+    let dest = Path::new(dest_dir);
+    if !dest.is_dir() {
+        return Err(format!("Destination folder does not exist: {dest_dir}"));
+    }
+
+    let mut manifest = load_manifest(dest_dir)?;
+    let total = jobs.len();
+    let mut report = CopyReport {
+        copied: 0,
+        files_copied: 0,
+        errors: Vec::new(),
+    };
+
+    for (i, job) in jobs.into_iter().enumerate() {
+        match copy_one_video(dest, &job, &mut manifest, dest_dir) {
+            Ok(files) => {
+                report.copied += 1;
+                report.files_copied += files;
+            }
+            Err(e) => report.errors.push(format!("{}: {e}", job.base_name)),
+        }
+
+        let _ = app.emit("copy://progress", CopyProgress { done: i + 1, total });
+    }
+
+    Ok(report)
+}
+
+fn copy_one_video(
+    dest: &Path,
+    job: &VideoJob,
+    manifest: &mut crate::manifest::Manifest,
+    dest_dir: &str,
+) -> Result<usize, String> {
+    let new_name = job
+        .new_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let renamed = new_name.is_some();
+    let target_base = new_name.unwrap_or(&job.base_name);
+
+    let dir = if renamed {
+        dest.join("unique").join("video")
+    } else {
+        dest.join("video")
+    };
+    let ext = extension_of(&job.path);
+
+    // Find a free suffix so a name clash doesn't overwrite an earlier clip.
+    let mut n = 0usize;
+    while candidate(&dir, target_base, n, &ext).exists() {
+        n += 1;
+    }
+
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Cannot create {}: {e}", dir.display()))?;
+    let dst = candidate(&dir, target_base, n, &ext);
+    std::fs::copy(&job.path, &dst).map_err(|e| format!("Cannot copy MP4: {e}"))?;
+    let target_path = dst.to_string_lossy().to_string();
+
+    if let Some(hash) = &job.hash {
+        manifest.videos.insert(
+            hash.clone(),
+            VideoEntry {
+                original_name: job.base_name.clone(),
+                target_name: target_base.to_string(),
+                target_path,
+                renamed,
+                date: chrono::Utc::now().to_rfc3339(),
+            },
+        );
+        if manifest.version == 0 {
+            manifest.version = 1;
+        }
+        save_manifest(dest_dir, manifest)?;
+    }
+
+    Ok(1)
 }

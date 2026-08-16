@@ -21,13 +21,16 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             fs_ops::check_dir,
             fs_ops::open_folder,
+            fs_ops::allow_media_dir,
             scan::scan_source,
             manifest::hash_jpg,
             manifest::renamed_targets,
             manifest::filter_by_manifest,
+            manifest::filter_videos_by_manifest,
             image::read_image,
             image::read_thumbnail,
             copy::copy_accepted,
+            copy::copy_videos,
             analyze::analyze_image,
             exif::read_exif
         ])
