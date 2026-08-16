@@ -63,6 +63,29 @@ fn parent_dir(p: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// Whether `stem` is `base` followed by one letter and one or more digits — the
+/// pattern Sony (XAVC S) uses for a clip's sidecar files: a thumbnail JPG
+/// `C0001T01.JPG` or a low-res proxy `C0001S01.MP4` beside `C0001.MP4`.
+fn companion_of(stem: &str, base: &str) -> bool {
+    if let Some(rest) = stem.strip_prefix(base) {
+        let mut chars = rest.chars();
+        if let Some(first) = chars.next() {
+            if first.is_ascii_uppercase() {
+                let digits = chars.as_str();
+                return !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit());
+            }
+        }
+    }
+    false
+}
+
+/// Whether a JPG stem is a camera-generated companion of a video clip, not a real
+/// photo. Matches the sidecar pattern above, plus an exact stem match in case a
+/// mode reuses the clip name verbatim.
+fn is_video_companion(stem: &str, video_stems: &std::collections::HashSet<&str>) -> bool {
+    video_stems.contains(stem) || video_stems.iter().any(|v| companion_of(stem, v))
+}
+
 /// Recursively scan the source directory. Collects .jpg/.jpeg/.arw photo pairs
 /// and standalone .mp4 clips (case-insensitive). Read-only — changes nothing.
 /// Reports progress via `scan://progress` events.
@@ -149,16 +172,26 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<ScanResult, String> {
         },
     );
 
-    // Cameras drop a small companion JPG next to each clip (same base name) as a
-    // video thumbnail. Those aren't real photos — drop any entry whose base name
-    // matches a video so the thumbnail doesn't show up in the Photos tab.
+    // Drop XAVC S proxy clips (`C0001S01.MP4` beside `C0001.MP4`) — same content,
+    // low-res. Keep only clips that aren't a sidecar of another clip.
+    let all_stems: std::collections::HashSet<String> =
+        videos.iter().map(|v| v.base_name.clone()).collect();
+    videos.retain(|vid| {
+        !all_stems
+            .iter()
+            .any(|other| other != &vid.base_name && companion_of(&vid.base_name, other))
+    });
+
+    // Cameras drop a small companion JPG next to each clip (e.g. `C0001T01.JPG`
+    // beside `C0001.MP4`) as a video thumbnail. Those aren't real photos — drop
+    // any entry that is a video companion so it never reaches the Photos tab.
     let video_stems: std::collections::HashSet<&str> =
         videos.iter().map(|v| v.base_name.as_str()).collect();
 
     // Assemble the result. source_dir: prefer the JPG directory, else the ARW one.
     let mut photos: Vec<Photo> = entries
         .into_iter()
-        .filter(|(base_name, _)| !video_stems.contains(base_name.as_str()))
+        .filter(|(base_name, _)| !is_video_companion(base_name, &video_stems))
         .map(|(base_name, e)| Photo {
             base_name,
             jpg_path: e.jpg_path,
