@@ -223,10 +223,9 @@ function VideoReviewComplete() {
             <button
               className="fc-btn fc-btn--primary"
               onClick={runCopy}
-              disabled={totalAccepted === 0}
-              title={totalAccepted === 0 ? "Nothing accepted to copy" : "Copy accepted"}
+              title={totalAccepted === 0 ? "Nothing to copy — finish the session" : "Copy accepted"}
             >
-              Copy {totalAccepted} accepted →
+              {totalAccepted === 0 ? "Finish →" : `Copy ${totalAccepted} accepted →`}
             </button>
           </div>
         </>

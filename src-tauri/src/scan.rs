@@ -149,9 +149,16 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<ScanResult, String> {
         },
     );
 
+    // Cameras drop a small companion JPG next to each clip (same base name) as a
+    // video thumbnail. Those aren't real photos — drop any entry whose base name
+    // matches a video so the thumbnail doesn't show up in the Photos tab.
+    let video_stems: std::collections::HashSet<&str> =
+        videos.iter().map(|v| v.base_name.as_str()).collect();
+
     // Assemble the result. source_dir: prefer the JPG directory, else the ARW one.
     let mut photos: Vec<Photo> = entries
         .into_iter()
+        .filter(|(base_name, _)| !video_stems.contains(base_name.as_str()))
         .map(|(base_name, e)| Photo {
             base_name,
             jpg_path: e.jpg_path,
