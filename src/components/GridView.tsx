@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAppState, COMPARE_MAX } from "../state/appStore";
 import { burstGroups } from "../lib/bursts";
 import { assetUrl, requestPreviews, usePreview } from "../lib/previews";
+import { VERY_SLOW_SHUTTER_S, shutterLabel } from "../lib/report";
 import type { Decision } from "../types/review";
 import type { Photo } from "../types/photo";
 import "./GridView.css";
@@ -497,6 +498,11 @@ function GridTile({
       <div className="grid-tile__cap">
         <span className="grid-tile__no">{item.index + 1}</span>
         <span className="grid-tile__name">{photo.baseName}</span>
+        {(photo.meta?.exposureS ?? 0) > VERY_SLOW_SHUTTER_S * 1.001 && (
+          <span className="grid-tile__slow" title="Slow shutter: check for motion blur">
+            {shutterLabel(photo.meta!.exposureS!)}
+          </span>
+        )}
         <span className="grid-tile__mark">
           {item.stack ? (kept ? `${kept} kept` : "") : decision?.kind === "accept" ? "kept" : decision?.kind === "reject" ? "rejected" : ""}
         </span>

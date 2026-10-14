@@ -192,6 +192,9 @@
 .grid-tile__mark {
   margin-left: auto;
 }
+.grid-tile__slow {
+  color: var(--fc-warn);
+}
 .grid-tile.is-accept .grid-tile__mark,
 .grid-tile.is-mixed .grid-tile__mark {
   color: var(--fc-green);

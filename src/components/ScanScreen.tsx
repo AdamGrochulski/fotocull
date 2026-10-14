@@ -1,5 +1,6 @@
 import { useAppState } from "../state/appStore";
 import { baseName } from "../lib/paths";
+import { ShootReport } from "./ShootReport";
 import type { Photo } from "../types/photo";
 import "./ScanScreen.css";
 
@@ -20,6 +21,7 @@ export function ScanScreen() {
     scanStage,
     indexProgress,
     unreadable,
+    shootPhotos,
     filteredOut,
     filteredOutVideos,
     resetToSetup,
@@ -100,6 +102,8 @@ export function ScanScreen() {
         <Stat label="ARW only" value={arwOnly} />
         <Stat label="Videos (MP4)" value={videos.length} />
       </div>
+
+      <ShootReport photos={shootPhotos} />
 
       {photos.length === 0 && videos.length === 0 ? (
         <p className="scan-empty">

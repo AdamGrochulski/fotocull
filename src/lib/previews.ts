@@ -35,8 +35,10 @@ const infos = new Map<string, PreviewInfo>();
 const errors = new Map<string, string>();
 const inflight = new Set<string>();
 const listeners = new Set<() => void>();
+let version = 0;
 
 function notify() {
+  version++;
   listeners.forEach((l) => l());
 }
 
@@ -62,6 +64,11 @@ export function usePreview(hash: string | undefined): PreviewInfo | undefined {
 /** Why a photo has no preview (decode failure), if it failed. */
 export function usePreviewError(hash: string | undefined): string | undefined {
   return useSyncExternalStore(subscribe, () => (hash ? errors.get(hash) : undefined));
+}
+
+/** Changes whenever any preview arrives (for views that summarise many). */
+export function usePreviewsVersion(): number {
+  return useSyncExternalStore(subscribe, () => version);
 }
 
 export function getPreview(hash: string | undefined): PreviewInfo | undefined {

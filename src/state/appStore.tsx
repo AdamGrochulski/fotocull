@@ -89,6 +89,9 @@ interface AppState {
   indexProgress: IndexProgress | null;
   /** Files that couldn't be read during indexing; left out of the review. */
   unreadable: { path: string; error: string }[];
+  /** Every readable photo of the last scan, including ones already handled:
+   * the shoot report describes the whole shoot, not just what's left. */
+  shootPhotos: Photo[];
   /** How many photos were skipped as already copied or rejected earlier. */
   filteredOut: number;
   /** How many videos were skipped as already-copied/rejected. */
@@ -213,6 +216,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [scanStage, setScanStage] = useState<"scan" | "index" | null>(null);
   const [indexProgress, setIndexProgress] = useState<IndexProgress | null>(null);
   const [unreadable, setUnreadable] = useState<{ path: string; error: string }[]>([]);
+  const [shootPhotos, setShootPhotos] = useState<Photo[]>([]);
   const [filteredOut, setFilteredOut] = useState(0);
   const [filteredOutVideos, setFilteredOutVideos] = useState(0);
 
@@ -310,6 +314,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setScanProgress(null);
     setIndexProgress(null);
     setUnreadable([]);
+    setShootPhotos([]);
     setFilteredOut(0);
     setFilteredOutVideos(0);
     setPhotos([]);
@@ -374,6 +379,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const bad: { path: string; error: string }[] = [];
       const remaining: Photo[] = [];
+      const everything: Photo[] = [];
       let skipped = 0;
       for (const p of found) {
         const r = photoIndex.get(identityPath(p) ?? "");
@@ -381,6 +387,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           bad.push({ path: identityPath(p) ?? p.baseName, error: r?.error ?? "not indexed" });
           continue;
         }
+        everything.push({ ...p, hash: r.hash, meta: r.meta });
         if (r.alreadyCopied || rev[r.hash]?.kind === "reject") {
           skipped++;
           continue;
@@ -407,8 +414,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       setUnreadable(bad);
+      setShootPhotos(everything.sort(byCaptureTime));
       setFilteredOut(skipped);
       setPhotos(remaining);
+      // Start on previews right away: the scan report reads their clipping
+      // stats, and review opens on ready pictures.
+      void warmPreviews(
+        remaining.flatMap((p) => (p.hash && p.jpgPath ? [{ hash: p.hash, path: p.jpgPath }] : [])),
+      ).catch((err) => console.error("Preview warm-up failed:", err));
       setFilteredOutVideos(skippedVideos);
       setVideos(remainingVideos);
       setPhase("scanned");
@@ -744,6 +757,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     scanStage,
     indexProgress,
     unreadable,
+    shootPhotos,
     filteredOut,
     filteredOutVideos,
     startScan,
