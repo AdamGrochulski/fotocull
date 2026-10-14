@@ -153,3 +153,27 @@
     transform: rotate(360deg);
   }
 }
+
+/* Files the index couldn't read (damaged card sectors, permissions). */
+.scan-unreadable {
+  border: 1px solid color-mix(in srgb, var(--fc-warn) 45%, transparent);
+  border-radius: var(--fc-r);
+  padding: var(--fc-s2) var(--fc-s3);
+  color: var(--fc-warn);
+  font-size: var(--fc-fs-sm);
+}
+.scan-unreadable summary {
+  cursor: pointer;
+}
+.scan-unreadable ul {
+  margin: var(--fc-s2) 0 0;
+  padding-left: 1.2em;
+  color: var(--fc-text-muted);
+  max-height: 160px;
+  overflow-y: auto;
+}
+.scan-unreadable code {
+  font-family: var(--fc-mono);
+  font-size: 0.9em;
+  word-break: break-all;
+}

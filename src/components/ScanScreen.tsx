@@ -18,7 +18,8 @@ export function ScanScreen() {
     videos,
     scanProgress,
     scanStage,
-    hashProgress,
+    indexProgress,
+    unreadable,
     filteredOut,
     filteredOutVideos,
     resetToSetup,
@@ -26,18 +27,15 @@ export function ScanScreen() {
   } = useAppState();
 
   if (phase === "scanning") {
-    const hashing = scanStage === "hash" || scanStage === "vhash";
+    const indexing = scanStage === "index";
     return (
       <div className="scan-screen">
-        <h2>{hashing ? "Checking manifest…" : "Scanning media…"}</h2>
+        <h2>{indexing ? "Checking files…" : "Scanning media…"}</h2>
         <div className="scan-progress">
-          {scanStage === "vhash" ? (
+          {indexing ? (
             <div>
-              Hashing video: {hashProgress?.hashed ?? 0} / {hashProgress?.total ?? 0}
-            </div>
-          ) : scanStage === "hash" ? (
-            <div>
-              Hashing JPG: {hashProgress?.hashed ?? 0} / {hashProgress?.total ?? 0}
+              {indexProgress?.kind === "video" ? "Videos" : "Photos"}:{" "}
+              {indexProgress?.done ?? 0} / {indexProgress?.total ?? 0}
             </div>
           ) : (
             <>
@@ -78,6 +76,21 @@ export function ScanScreen() {
           {filteredOutVideos > 0 && ` and ${filteredOutVideos} video(s)`} — already
           handled earlier (copied or rejected), matched by content hash.
         </div>
+      )}
+
+      {unreadable.length > 0 && (
+        <details className="scan-unreadable">
+          <summary>
+            {unreadable.length} file(s) could not be read and were left out
+          </summary>
+          <ul>
+            {unreadable.map((u) => (
+              <li key={u.path}>
+                <code>{u.path}</code>: {u.error}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <div className="scan-stats">

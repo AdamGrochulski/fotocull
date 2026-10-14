@@ -1,24 +1,26 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Emitter};
 
 /// Manifest entry: what was copied and where. The map key is the SHA-256 of the
-/// JPG file (identity by content, not by name).
-/// Entries are written on accept (Stage 5); here we only read.
+/// photo's identity file: its JPG, or its ARW when there is no JPG (identity by
+/// content, not by name).
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestEntry {
     pub original_name: String,
     pub target_name: String,
-    pub target_jpg_path: String,
+    /// Absent for ARW-only photos.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub target_jpg_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub target_arw_path: Option<String>,
+    /// SHA-256 of the copied ARW, so the photo is recognised by either file.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub arw_hash: Option<String>,
     pub renamed: bool,
     pub date: String,
 }
@@ -40,7 +42,7 @@ pub struct VideoEntry {
 pub struct Manifest {
     #[serde(default)]
     pub version: u32,
-    /// JPG hash → entry.
+    /// Identity hash (JPG, else ARW) → entry.
     #[serde(default)]
     pub entries: HashMap<String, ManifestEntry>,
     /// MP4 hash → entry. Videos are deduped independently of photos.
@@ -54,7 +56,7 @@ pub fn manifest_path(dest_dir: &str) -> PathBuf {
 }
 
 /// Load the manifest from the destination folder. A missing file means an empty
-/// manifest (nothing is created on disk until the first write in Stage 5).
+/// manifest (nothing is created on disk until the first copy).
 pub fn load_manifest(dest_dir: &str) -> Result<Manifest, String> {
     let path = manifest_path(dest_dir);
     if !path.exists() {
@@ -92,7 +94,7 @@ pub fn save_manifest(dest_dir: &str, manifest: &Manifest) -> Result<(), String> 
     Ok(())
 }
 
-/// SHA-256 of a file's contents (hex). Reads in a stream — safe for large JPGs.
+/// SHA-256 of a file's contents (hex). Reads in a stream, so large files are fine.
 pub fn hash_file(path: &str) -> Result<String, String> {
     let mut file =
         std::fs::File::open(path).map_err(|e| format!("Cannot open {path}: {e}"))?;
@@ -108,12 +110,6 @@ pub fn hash_file(path: &str) -> Result<String, String> {
         hasher.update(&buf[..n]);
     }
     Ok(format!("{:x}", hasher.finalize()))
-}
-
-/// Command: SHA-256 of a single JPG file.
-#[tauri::command]
-pub fn hash_jpg(path: String) -> Result<String, String> {
-    hash_file(&path)
 }
 
 /// Command: distinct target names previously assigned to renamed photos in this
@@ -135,114 +131,4 @@ pub fn renamed_targets(dest_dir: String) -> Result<Vec<String>, String> {
         }
     }
     Ok(set.into_iter().collect())
-}
-
-/// Result of matching one JPG against the manifest.
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct HashResult {
-    pub path: String,
-    pub hash: String,
-    /// Hash already in the manifest → the photo was copied before.
-    pub already_copied: bool,
-}
-
-/// Hashing progress (event `hash://progress`).
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct HashProgress {
-    hashed: usize,
-    total: usize,
-}
-
-/// Hash the given JPG files and mark which ones are already in the destination
-/// folder's manifest. The frontend uses this to filter out already-moved photos.
-#[tauri::command]
-pub async fn filter_by_manifest(
-    app: AppHandle,
-    dest_dir: String,
-    jpg_paths: Vec<String>,
-) -> Result<Vec<HashResult>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let manifest = load_manifest(&dest_dir)?;
-        let total = jpg_paths.len();
-        let done = AtomicUsize::new(0);
-
-        // Hash in parallel: reading each JPG from the card and computing SHA-256
-        // is the slow part, so overlap I/O and spread the hashing across cores.
-        // Output order doesn't matter — the frontend maps results back by path.
-        let results: Vec<Result<HashResult, String>> = jpg_paths
-            .par_iter()
-            .map(|path| {
-                let hash = hash_file(path)?;
-                let already_copied = manifest.entries.contains_key(&hash);
-
-                let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-                if n % 20 == 0 || n == total {
-                    let _ = app.emit(
-                        "hash://progress",
-                        HashProgress { hashed: n, total },
-                    );
-                }
-
-                Ok(HashResult {
-                    path: path.clone(),
-                    hash,
-                    already_copied,
-                })
-            })
-            .collect();
-
-        let mut out = Vec::with_capacity(total);
-        for r in results {
-            out.push(r?);
-        }
-        Ok(out)
-    })
-    .await
-    .map_err(|e| format!("Hashing task aborted: {e}"))?
-}
-
-/// Hash the given MP4 files and mark which are already in the destination
-/// folder's video manifest. Mirrors `filter_by_manifest` but for videos, so
-/// already-copied clips are hidden on a rescan. Progress via `vhash://progress`.
-#[tauri::command]
-pub async fn filter_videos_by_manifest(
-    app: AppHandle,
-    dest_dir: String,
-    video_paths: Vec<String>,
-) -> Result<Vec<HashResult>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let manifest = load_manifest(&dest_dir)?;
-        let total = video_paths.len();
-        let done = AtomicUsize::new(0);
-
-        // Hashing a multi-GB clip is slow; spread the files across cores.
-        let results: Vec<Result<HashResult, String>> = video_paths
-            .par_iter()
-            .map(|path| {
-                let hash = hash_file(path)?;
-                let already_copied = manifest.videos.contains_key(&hash);
-
-                let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-                if n % 2 == 0 || n == total {
-                    let _ = app.emit("vhash://progress", HashProgress { hashed: n, total });
-                }
-
-                Ok(HashResult {
-                    path: path.clone(),
-                    hash,
-                    already_copied,
-                })
-            })
-            .collect();
-
-        let mut out = Vec::with_capacity(total);
-        for r in results {
-            out.push(r?);
-        }
-        Ok(out)
-    })
-    .await
-    .map_err(|e| format!("Video hashing task aborted: {e}"))?
 }

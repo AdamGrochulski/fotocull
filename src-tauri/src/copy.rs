@@ -14,8 +14,9 @@ pub struct CopyJob {
     pub base_name: String,
     pub jpg_path: Option<String>,
     pub arw_path: Option<String>,
-    /// SHA-256 of the JPG (present only when the photo has a JPG).
-    pub jpg_hash: Option<String>,
+    /// Identity hash from the scan: SHA-256 of the JPG, or of the ARW when the
+    /// photo has no JPG.
+    pub hash: Option<String>,
     /// Copy the companion ARW too (ignored for ARW-only photos, which always copy).
     pub include_arw: bool,
     /// New base name, or empty/None to keep the original.
@@ -234,6 +235,7 @@ fn copy_one(
     let mut files = 0usize;
     let mut target_jpg_path: Option<String> = None;
     let mut target_arw_path: Option<String> = None;
+    let mut arw_hash: Option<String> = None;
 
     // Copy JPG (if present).
     if let (Some(src), Some(ext)) = (&job.jpg_path, &jpg_ext) {
@@ -241,7 +243,7 @@ fn copy_one(
             .map_err(|e| format!("Cannot create {}: {e}", jpg_dir.display()))?;
         let dst = candidate(&jpg_dir, target_base, n, ext);
         let hash = copy_verified(Path::new(src), &dst).map_err(|e| format!("JPG: {e}"))?;
-        if job.jpg_hash.as_deref().is_some_and(|h| h != hash) {
+        if job.hash.as_deref().is_some_and(|h| h != hash) {
             // The card changed since the scan: don't record a stale identity.
             let _ = std::fs::remove_file(&dst);
             return Err("JPG changed on the card since the scan; scan again".to_string());
@@ -258,27 +260,39 @@ fn copy_one(
             let copied = std::fs::create_dir_all(&raw_dir)
                 .map_err(|e| format!("Cannot create {}: {e}", raw_dir.display()))
                 .and_then(|_| copy_verified(Path::new(src), &dst).map_err(|e| format!("ARW: {e}")));
-            if let Err(e) = copied {
-                if let Some(jpg) = &target_jpg_path {
-                    let _ = std::fs::remove_file(jpg);
+            let copied = copied.and_then(|hash| {
+                // An ARW-only photo is identified by its ARW: same check as the JPG.
+                if !has_jpg && job.hash.as_deref().is_some_and(|h| h != hash) {
+                    let _ = std::fs::remove_file(&dst);
+                    return Err("ARW changed on the card since the scan; scan again".to_string());
                 }
-                return Err(e);
+                Ok(hash)
+            });
+            match copied {
+                Ok(hash) => arw_hash = Some(hash),
+                Err(e) => {
+                    if let Some(jpg) = &target_jpg_path {
+                        let _ = std::fs::remove_file(jpg);
+                    }
+                    return Err(e);
+                }
             }
             target_arw_path = Some(dst.to_string_lossy().to_string());
             files += 1;
         }
     }
 
-    // Record in the manifest (keyed by JPG hash) and persist atomically.
-    // ARW-only photos have no JPG hash, so they aren't deduped by manifest.
-    if let (Some(hash), Some(jpg_target)) = (&job.jpg_hash, &target_jpg_path) {
+    // Record in the manifest (keyed by the identity hash) and persist
+    // atomically, so the photo is skipped on every later scan.
+    if let Some(hash) = &job.hash {
         manifest.entries.insert(
             hash.clone(),
             ManifestEntry {
                 original_name: job.base_name.clone(),
                 target_name: target_base.to_string(),
-                target_jpg_path: jpg_target.clone(),
-                target_arw_path: target_arw_path.clone(),
+                target_jpg_path,
+                target_arw_path,
+                arw_hash,
                 renamed,
                 date: chrono::Utc::now().to_rfc3339(),
             },
@@ -427,7 +441,7 @@ mod tests {
             base_name: base.to_string(),
             jpg_path: Some(jpg.to_string_lossy().to_string()),
             arw_path: arw.then(|| src.join(format!("{base}.ARW")).to_string_lossy().to_string()),
-            jpg_hash: None,
+            hash: None,
             include_arw: arw,
             new_name: new_name.map(str::to_string),
         }
@@ -477,6 +491,32 @@ mod tests {
         assert!(dest.join("jpg/DSC1_1.JPG").exists());
         assert!(dest.join("raw/DSC1_1.ARW").exists());
         assert_eq!(std::fs::read(dest.join("jpg/DSC1.JPG")).unwrap(), b"older");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn arw_only_photo_is_recorded_under_its_arw_hash() {
+        let root = scratch("arwonly");
+        let (src, dest) = (root.join("card"), root.join("dest"));
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::create_dir_all(&dest).unwrap();
+        let arw = src.join("DSC9.ARW");
+        std::fs::write(&arw, b"only raw").unwrap();
+        let hash = hash_file(&arw.to_string_lossy()).unwrap();
+        let j = CopyJob {
+            base_name: "DSC9".into(),
+            jpg_path: None,
+            arw_path: Some(arw.to_string_lossy().to_string()),
+            hash: Some(hash.clone()),
+            include_arw: false,
+            new_name: None,
+        };
+        let mut manifest = Manifest::default();
+        assert_eq!(copy_one(&dest, &j, &mut manifest, &dest.to_string_lossy()).unwrap(), 1);
+        let entry = manifest.entries.get(&hash).expect("entry keyed by ARW hash");
+        assert!(entry.target_jpg_path.is_none());
+        assert_eq!(entry.arw_hash.as_deref(), Some(hash.as_str()));
+        assert!(dest.join("raw/DSC9.ARW").exists());
         std::fs::remove_dir_all(root).unwrap();
     }
 

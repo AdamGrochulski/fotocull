@@ -8,14 +8,8 @@ import {
 import { load, type Store } from "@tauri-apps/plugin-store";
 import { checkDir, pickDirectory } from "../lib/fs";
 import { scanSource, onScanProgress, type ScanProgress } from "../lib/scan";
-import {
-  filterByManifest,
-  filterVideosByManifest,
-  renamedTargets,
-  onHashProgress,
-  onVideoHashProgress,
-  type HashProgress,
-} from "../lib/manifest";
+import { renamedTargets } from "../lib/manifest";
+import { indexMedia, onIndexProgress, type IndexProgress, type IndexResult } from "../lib/index";
 import {
   copyAccepted,
   copyVideos,
@@ -28,7 +22,7 @@ import {
 import { allowMediaDir } from "../lib/media";
 import { sanitizeName } from "../lib/names";
 import type { DirStatus, FolderRole } from "../types/fs";
-import type { Photo } from "../types/photo";
+import { identityPath, type Photo } from "../types/photo";
 import type { Video } from "../types/video";
 import type { Decision, DecisionKind } from "../types/review";
 
@@ -89,10 +83,12 @@ interface AppState {
   videos: Video[];
   scanProgress: ScanProgress | null;
   scanError: string | null;
-  /** Which sub-stage of "scanning" is active: file scan, JPG hashing, or MP4 hashing. */
-  scanStage: "scan" | "hash" | "vhash" | null;
-  hashProgress: HashProgress | null;
-  /** How many photos were skipped because their JPG hash was already in the manifest. */
+  /** Which sub-stage of "scanning" is active: file walk, then indexing (hash + EXIF). */
+  scanStage: "scan" | "index" | null;
+  indexProgress: IndexProgress | null;
+  /** Files that couldn't be read during indexing; left out of the review. */
+  unreadable: { path: string; error: string }[];
+  /** How many photos were skipped as already copied or rejected earlier. */
   filteredOut: number;
   /** How many videos were skipped as already-copied/rejected. */
   filteredOutVideos: number;
@@ -167,6 +163,22 @@ interface AppState {
   runCopy: () => Promise<void>;
 }
 
+/** Index results keyed by file path. */
+function byPath(results: IndexResult[]): Map<string, IndexResult> {
+  return new Map(results.map((r) => [r.path, r]));
+}
+
+/** Capture time, then name (then folder) for files without an EXIF time. */
+function byCaptureTime(a: Photo, b: Photo): number {
+  const ta = a.meta?.capturedAt ?? "";
+  const tb = b.meta?.capturedAt ?? "";
+  if (ta && tb && ta !== tb) return ta < tb ? -1 : 1;
+  if (!!ta !== !!tb) return ta ? -1 : 1;
+  return (
+    a.baseName.localeCompare(b.baseName) || a.sourceDir.localeCompare(b.sourceDir)
+  );
+}
+
 const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -189,8 +201,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [scanStage, setScanStage] = useState<"scan" | "hash" | "vhash" | null>(null);
-  const [hashProgress, setHashProgress] = useState<HashProgress | null>(null);
+  const [scanStage, setScanStage] = useState<"scan" | "index" | null>(null);
+  const [indexProgress, setIndexProgress] = useState<IndexProgress | null>(null);
+  const [unreadable, setUnreadable] = useState<{ path: string; error: string }[]>([]);
   const [filteredOut, setFilteredOut] = useState(0);
   const [filteredOutVideos, setFilteredOutVideos] = useState(0);
 
@@ -284,7 +297,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setPhase("scanning");
     setScanError(null);
     setScanProgress(null);
-    setHashProgress(null);
+    setIndexProgress(null);
+    setUnreadable([]);
     setFilteredOut(0);
     setFilteredOutVideos(0);
     setPhotos([]);
@@ -302,7 +316,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       setScanError(String(err));
       setPhase("setup");
-      unlistenScan();
       return;
     } finally {
       unlistenScan();
@@ -317,29 +330,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Step 2: hash JPGs and filter out already-copied ones per the manifest.
-    setScanStage("hash");
-    const jpgPaths = found
-      .map((p) => p.jpgPath)
-      .filter((x): x is string => !!x);
-
+    // Step 2: index (hash + EXIF) photos by their identity file, then clips.
+    // Already-copied and previously rejected items are hidden; unreadable files
+    // are listed instead of aborting the scan.
+    setScanStage("index");
+    const unlistenIndex = await onIndexProgress(setIndexProgress);
     try {
-      const byPath = new Map<string, { hash: string; alreadyCopied: boolean }>();
-      if (jpgPaths.length > 0) {
-        const unlistenHash = await onHashProgress(setHashProgress);
-        try {
-          const results = await filterByManifest(destDir, jpgPaths);
-          for (const r of results) {
-            byPath.set(r.path, { hash: r.hash, alreadyCopied: r.alreadyCopied });
-          }
-        } finally {
-          unlistenHash();
-        }
-      }
+      const photoPaths = found.map(identityPath).filter((x): x is string => !!x);
+      const photoIndex = byPath(
+        photoPaths.length ? await indexMedia(destDir, photoPaths, "photo") : [],
+      );
+      const videoIndex = byPath(
+        foundVideos.length
+          ? await indexMedia(destDir, foundVideos.map((v) => v.path), "video")
+          : [],
+      );
 
-      // Load this destination's review history: already-copied (manifest) and
-      // previously-rejected photos are hidden; accepted-but-not-yet-copied ones
-      // stay and get their decision restored later (resume).
+      // This destination's review history: rejects are a permanent skip-list,
+      // accepted-but-not-copied decisions are restored later (resume).
       const record = await sessions?.get<SessionRecord>(destDir);
       const rev = record?.reviewed ?? {};
       setReviewed(rev);
@@ -354,55 +362,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ).sort((a, b) => a.localeCompare(b));
       setNameSuggestions(pool);
 
-      // Photos without a JPG (ARW only) stay — they can't be deduped by hash.
+      const bad: { path: string; error: string }[] = [];
       const remaining: Photo[] = [];
+      let skipped = 0;
       for (const p of found) {
-        if (!p.jpgPath) {
-          remaining.push(p);
+        const r = photoIndex.get(identityPath(p) ?? "");
+        if (!r?.hash) {
+          bad.push({ path: identityPath(p) ?? p.baseName, error: r?.error ?? "not indexed" });
           continue;
         }
-        const r = byPath.get(p.jpgPath);
-        if (r?.alreadyCopied) continue; // skip — already copied
-        if (r?.hash && rev[r.hash]?.kind === "reject") continue; // permanently rejected
-        remaining.push({ ...p, jpgHash: r?.hash });
+        if (r.alreadyCopied || rev[r.hash]?.kind === "reject") {
+          skipped++;
+          continue;
+        }
+        remaining.push({ ...p, hash: r.hash, meta: r.meta });
       }
+      // Shooting order: capture time first (folders and file-number resets
+      // don't matter), then name for files without EXIF time.
+      remaining.sort(byCaptureTime);
 
-      setFilteredOut(found.length - remaining.length);
-      setPhotos(remaining);
-
-      // Videos: hash and dedup against the manifest, same as photos.
       const remainingVideos: Video[] = [];
-      if (foundVideos.length > 0) {
-        setScanStage("vhash");
-        setHashProgress(null);
-        const vByPath = new Map<string, { hash: string; alreadyCopied: boolean }>();
-        const unlistenV = await onVideoHashProgress(setHashProgress);
-        try {
-          const vres = await filterVideosByManifest(
-            destDir,
-            foundVideos.map((v) => v.path),
-          );
-          for (const r of vres) {
-            vByPath.set(r.path, { hash: r.hash, alreadyCopied: r.alreadyCopied });
-          }
-        } finally {
-          unlistenV();
+      let skippedVideos = 0;
+      for (const v of foundVideos) {
+        const r = videoIndex.get(v.path);
+        if (!r?.hash) {
+          bad.push({ path: v.path, error: r?.error ?? "not indexed" });
+          continue;
         }
-        for (const v of foundVideos) {
-          const r = vByPath.get(v.path);
-          if (r?.alreadyCopied) continue; // already copied
-          if (r?.hash && vrev[r.hash]?.kind === "reject") continue; // rejected before
-          remainingVideos.push({ ...v, hash: r?.hash });
+        if (r.alreadyCopied || vrev[r.hash]?.kind === "reject") {
+          skippedVideos++;
+          continue;
         }
+        remainingVideos.push({ ...v, hash: r.hash });
       }
-      setFilteredOutVideos(foundVideos.length - remainingVideos.length);
-      setVideos(remainingVideos);
 
+      setUnreadable(bad);
+      setFilteredOut(skipped);
+      setPhotos(remaining);
+      setFilteredOutVideos(skippedVideos);
+      setVideos(remainingVideos);
       setPhase("scanned");
     } catch (err) {
       setScanError(String(err));
       setPhase("setup");
     } finally {
+      unlistenIndex();
       setScanStage(null);
     }
   }
@@ -410,7 +414,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   function resetToSetup() {
     setPhase("setup");
     setScanProgress(null);
-    setHashProgress(null);
+    setIndexProgress(null);
     setScanStage(null);
     setScanError(null);
   }
@@ -419,7 +423,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Restore accepted-but-not-copied decisions from a prior session, and start
     // at the first photo still undecided (resume where you left off).
     const seeded: (Decision | undefined)[] = photos.map((p) => {
-      const r = p.jpgHash ? reviewed[p.jpgHash] : undefined;
+      const r = p.hash ? reviewed[p.hash] : undefined;
       return r?.kind === "accept"
         ? { kind: "accept", includeArw: r.includeArw, newName: r.newName }
         : undefined;
@@ -461,7 +465,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         baseName: p.baseName,
         jpgPath: p.jpgPath,
         arwPath: p.arwPath,
-        jpgHash: p.jpgHash,
+        hash: p.hash,
         includeArw: d.includeArw,
         newName: d.newName || undefined,
       });
@@ -539,14 +543,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setNameSuggestions(names);
     }
 
-    // Persist immediately, keyed by JPG hash, so a crash or early quit can't lose
+    // Persist immediately, keyed by identity hash, so a crash or early quit can't lose
     // the decision. Rejects become a permanent skip-list; accepts are resumable
     // until the copy moves them into the manifest.
     const photo = photos[index];
-    if (photo?.jpgHash && destDir) {
+    if (photo?.hash && destDir) {
       const nextReviewed = {
         ...reviewed,
-        [photo.jpgHash]: { kind, includeArw: opts.includeArw, newName },
+        [photo.hash]: { kind, includeArw: opts.includeArw, newName },
       };
       setReviewed(nextReviewed);
       void persistSession(destDir, nextReviewed, videoReviewed, names);
@@ -662,7 +666,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     scanProgress,
     scanError,
     scanStage,
-    hashProgress,
+    indexProgress,
+    unreadable,
     filteredOut,
     filteredOutVideos,
     startScan,

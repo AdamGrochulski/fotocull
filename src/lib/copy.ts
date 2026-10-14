@@ -6,7 +6,8 @@ export interface CopyJob {
   baseName: string;
   jpgPath?: string;
   arwPath?: string;
-  jpgHash?: string;
+  /** Identity hash (JPG, else ARW) from the scan. */
+  hash?: string;
   includeArw: boolean;
   newName?: string;
 }

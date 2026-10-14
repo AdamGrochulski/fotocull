@@ -31,3 +31,8 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 rayon = "1"
 kamadak-exif = "0.5"
 
+
+# Dependencies (image decoding, hashing) are optimized even in dev builds: an
+# unoptimized JPEG decode or SHA-256 is ~10x slower and makes `tauri dev` crawl.
+[profile.dev.package."*"]
+opt-level = 3

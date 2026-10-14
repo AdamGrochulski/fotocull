@@ -3,6 +3,7 @@ mod copy;
 mod exif;
 mod fs_ops;
 mod image;
+mod index;
 mod manifest;
 mod names;
 mod scan;
@@ -24,16 +25,13 @@ pub fn run() {
             fs_ops::open_folder,
             fs_ops::allow_media_dir,
             scan::scan_source,
-            manifest::hash_jpg,
             manifest::renamed_targets,
-            manifest::filter_by_manifest,
-            manifest::filter_videos_by_manifest,
+            index::index_media,
             image::read_image,
             image::read_thumbnail,
             copy::copy_accepted,
             copy::copy_videos,
-            analyze::analyze_image,
-            exif::read_exif
+            analyze::analyze_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

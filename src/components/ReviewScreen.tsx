@@ -8,10 +8,9 @@ import {
 import { useAppState, COMPARE_MAX } from "../state/appStore";
 import { loadImageUrl, loadThumbnailUrl } from "../lib/image";
 import { analyzeImage, type ImageAnalysis } from "../lib/analyze";
-import { readExif, type ExifInfo } from "../lib/exif";
 import { sanitizeName } from "../lib/names";
 import { PhotoViewer, type PhotoViewerHandle } from "./PhotoViewer";
-import type { Photo } from "../types/photo";
+import type { MediaMeta, Photo } from "../types/photo";
 import "./ReviewScreen.css";
 
 /** Thumbnail object-URL cache, keyed by JPG path. Thumbnails are tiny and reused
@@ -61,7 +60,6 @@ function ReviewCard({ photo }: { photo: Photo }) {
   const [imgError, setImgError] = useState(false);
   const [analysis, setAnalysis] = useState<ImageAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [exif, setExif] = useState<ExifInfo | null>(null);
 
   // Sync inputs when the photo changes (also when stepping back to an edited one).
   useEffect(() => {
@@ -107,19 +105,6 @@ function ReviewCard({ photo }: { photo: Photo }) {
       .then((a) => !cancelled && setAnalysis(a))
       .catch(() => !cancelled && setAnalysis(null))
       .finally(() => !cancelled && setAnalyzing(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [photo.jpgPath]);
-
-  // EXIF shooting parameters (aperture, shutter, ISO, focal length, lens).
-  useEffect(() => {
-    let cancelled = false;
-    setExif(null);
-    if (!photo.jpgPath) return;
-    readExif(photo.jpgPath)
-      .then((e) => !cancelled && setExif(e))
-      .catch(() => !cancelled && setExif(null));
     return () => {
       cancelled = true;
     };
@@ -314,7 +299,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
         </span>
       </div>
 
-      <ExifReadout exif={exif} />
+      <ExifReadout exif={photo.meta} />
 
       <div className="review-controls">
         <label className={`review-toggle ${hasArw ? "" : "is-disabled"}`}>
@@ -708,7 +693,7 @@ function Thumb({
 }
 
 /** Shooting parameters strip: aperture · shutter · ISO · focal length · lens. */
-function ExifReadout({ exif }: { exif: ExifInfo | null }) {
+function ExifReadout({ exif }: { exif?: MediaMeta | null }) {
   if (!exif) return null;
   const items: string[] = [];
   if (exif.aperture) items.push(exif.aperture);
@@ -785,7 +770,6 @@ function CompareCell({ index }: { index: number }) {
   const [newName, setNewName] = useState(existing?.newName ?? "");
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
-  const [exif, setExif] = useState<ExifInfo | null>(null);
   const viewerRef = useRef<PhotoViewerHandle>(null);
 
   useEffect(() => {
@@ -808,18 +792,6 @@ function CompareCell({ index }: { index: number }) {
     return () => {
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
-    };
-  }, [photo?.jpgPath]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setExif(null);
-    if (!photo?.jpgPath) return;
-    readExif(photo.jpgPath)
-      .then((e) => !cancelled && setExif(e))
-      .catch(() => !cancelled && setExif(null));
-    return () => {
-      cancelled = true;
     };
   }, [photo?.jpgPath]);
 
@@ -858,7 +830,7 @@ function CompareCell({ index }: { index: number }) {
             </em>
           )}
         </span>
-        <ExifReadout exif={exif} />
+        <ExifReadout exif={photo.meta} />
       </div>
 
       <div className="compare-cell__controls">
