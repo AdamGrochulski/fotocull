@@ -97,6 +97,13 @@
   background: var(--fc-green);
 }
 
+/* Zoom lock is a tool state, not a sharpness signal: neutral, not green. */
+.pv-lock.is-on {
+  background: var(--fc-line-hi);
+  color: var(--fc-text);
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pv-toolbar,
   .pv-tool {

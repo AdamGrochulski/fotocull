@@ -21,6 +21,7 @@ import {
 } from "../lib/copy";
 import { allowMediaDir } from "../lib/media";
 import { sanitizeName } from "../lib/names";
+import { warmPreviews } from "../lib/previews";
 import type { DirStatus, FolderRole } from "../types/fs";
 import { identityPath, type Photo } from "../types/photo";
 import type { Video } from "../types/video";
@@ -321,13 +322,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unlistenScan();
     }
 
-    // Allow the asset protocol to stream video files from the source folder.
-    if (foundVideos.length > 0) {
-      try {
-        await allowMediaDir(sourceDir);
-      } catch (err) {
-        console.error("Failed to grant media access:", err);
-      }
+    // Let the webview read originals (deep zoom) and stream clips straight
+    // from the source folder. Read-only access.
+    try {
+      await allowMediaDir(sourceDir);
+    } catch (err) {
+      console.error("Failed to grant media access:", err);
     }
 
     // Step 2: index (hash + EXIF) photos by their identity file, then clips.
@@ -429,8 +429,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return r ? { kind: r.kind, includeArw: r.includeArw, newName: r.newName } : undefined;
     });
     const firstUndecided = seeded.findIndex((d) => d === undefined);
+    const start = firstUndecided === -1 ? photos.length : firstUndecided;
     setDecisions(seeded);
-    setReviewIndex(firstUndecided === -1 ? photos.length : firstUndecided);
+    setReviewIndex(start);
+
+    // Generate every preview in the background, starting where review starts.
+    const order = [...photos.slice(start), ...photos.slice(0, start)];
+    void warmPreviews(
+      order.flatMap((p) => (p.hash && p.jpgPath ? [{ hash: p.hash, path: p.jpgPath }] : [])),
+    ).catch((err) => console.error("Preview warm-up failed:", err));
     setReviewMode("single");
     setCompareSet([]);
 

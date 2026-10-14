@@ -6,16 +6,60 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useAppState, COMPARE_MAX } from "../state/appStore";
-import { loadImageUrl, loadThumbnailUrl } from "../lib/image";
-import { analyzeImage, type ImageAnalysis } from "../lib/analyze";
 import { sanitizeName } from "../lib/names";
+import {
+  assetUrl,
+  exposureLabel,
+  getPreview,
+  requestPreviews,
+  usePreview,
+  usePreviewError,
+  type PreviewInfo,
+} from "../lib/previews";
+import { previewFrames, thumbFrames } from "../lib/frames";
 import { PhotoViewer, type PhotoViewerHandle } from "./PhotoViewer";
 import type { MediaMeta, Photo } from "../types/photo";
 import "./ReviewScreen.css";
 
-/** Thumbnail object-URL cache, keyed by JPG path. Thumbnails are tiny and reused
- * as the filmstrip window slides, so they're kept for the app's lifetime. */
-const thumbCache = new Map<string, string>();
+/** Photos ahead of / behind the current one that get previews generated and
+ * decoded in advance, so moving through them is a redraw, not a load. */
+const PREFETCH_AHEAD = 6;
+const PREFETCH_BEHIND = 3;
+
+/** Zoom lock survives leaving and re-entering the single view. */
+let zoomLockPref = false;
+
+/**
+ * Keep the photo at `index` and its neighbours ready: previews generated (the
+ * current one first, on its own, so it never waits for the rest) and decoded
+ * into the frame cache.
+ */
+function useNeighbourPrefetch(photos: Photo[], index: number) {
+  useEffect(() => {
+    let cancelled = false;
+    const req = (p?: Photo) =>
+      p?.hash && p.jpgPath ? [{ hash: p.hash, path: p.jpgPath }] : [];
+    const ahead: Photo[] = [];
+    for (let d = 1; d <= PREFETCH_AHEAD; d++) if (photos[index + d]) ahead.push(photos[index + d]);
+    for (let d = 1; d <= PREFETCH_BEHIND; d++) if (photos[index - d]) ahead.push(photos[index - d]);
+
+    const decode = (list: Photo[]) => {
+      if (cancelled) return;
+      const infos = list.map((p) => getPreview(p.hash)).filter((i): i is PreviewInfo => !!i);
+      thumbFrames.prefetch(infos.map((i) => assetUrl(i.thumb)));
+      previewFrames.prefetch(infos.map((i) => assetUrl(i.preview)));
+    };
+    void (async () => {
+      await requestPreviews(req(photos[index]));
+      decode([photos[index]]);
+      await requestPreviews(ahead.flatMap(req));
+      decode(ahead);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [photos, index]);
+}
 
 /** Keys that decide or move between photos: ignored while auto-repeating. */
 export const DECISION_KEYS = new Set([
@@ -69,10 +113,14 @@ function ReviewCard({ photo }: { photo: Photo }) {
 
   const [includeArw, setIncludeArw] = useState(existing?.includeArw ?? false);
   const [newName, setNewName] = useState(existing?.newName ?? "");
-  const [imgUrl, setImgUrl] = useState<string | null>(null);
-  const [imgError, setImgError] = useState(false);
-  const [analysis, setAnalysis] = useState<ImageAnalysis | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [zoomLock, setZoomLock] = useState(zoomLockPref);
+  const preview = usePreview(photo.hash);
+  const previewError = usePreviewError(photo.hash);
+  useNeighbourPrefetch(photos, reviewIndex);
+
+  function toggleZoomLock() {
+    setZoomLock((v) => (zoomLockPref = !v));
+  }
 
   // Sync inputs when the photo changes (also when stepping back to an edited one).
   useEffect(() => {
@@ -80,48 +128,6 @@ function ReviewCard({ photo }: { photo: Photo }) {
     setNewName(existing?.newName ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewIndex]);
-
-  // Load the JPG preview; revoke the object URL on change/unmount.
-  useEffect(() => {
-    let url: string | null = null;
-    let cancelled = false;
-    setImgUrl(null);
-    setImgError(false);
-    if (photo.jpgPath) {
-      loadImageUrl(photo.jpgPath)
-        .then((u) => {
-          if (cancelled) {
-            URL.revokeObjectURL(u);
-            return;
-          }
-          url = u;
-          setImgUrl(u);
-        })
-        .catch(() => !cancelled && setImgError(true));
-    }
-    return () => {
-      cancelled = true;
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [photo.jpgPath]);
-
-  // Quality analysis (blur + exposure), computed in Rust off the UI thread.
-  useEffect(() => {
-    let cancelled = false;
-    setAnalysis(null);
-    if (!photo.jpgPath) {
-      setAnalyzing(false);
-      return;
-    }
-    setAnalyzing(true);
-    analyzeImage(photo.jpgPath)
-      .then((a) => !cancelled && setAnalysis(a))
-      .catch(() => !cancelled && setAnalysis(null))
-      .finally(() => !cancelled && setAnalyzing(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [photo.jpgPath]);
 
   const viewerRef = useRef<PhotoViewerHandle>(null);
 
@@ -142,6 +148,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
     toggleArw: () => {},
     compare: () => {},
     escape: () => {},
+    toggleLock: () => {},
   });
   actions.current = {
     accept,
@@ -149,6 +156,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
     toggleArw: () => hasArw && setIncludeArw((v) => !v),
     compare: () => (selecting ? openCompare() : startCompareSelect()),
     escape: () => selecting && cancelCompare(),
+    toggleLock: toggleZoomLock,
   };
 
   // Global shortcuts. Photo controls (P/F/1/±) drive the PhotoViewer imperatively.
@@ -209,6 +217,11 @@ function ReviewCard({ photo }: { photo: Photo }) {
           e.preventDefault();
           v?.fit();
           break;
+        case "l":
+        case "L":
+          e.preventDefault();
+          if (!e.repeat) actions.current.toggleLock();
+          break;
         case "1":
           e.preventDefault();
           v?.actual();
@@ -267,18 +280,23 @@ function ReviewCard({ photo }: { photo: Photo }) {
       </div>
 
       {hasJpg ? (
-        imgError ? (
+        previewError ? (
           <div className="review-stage">
             <div className="review-noimg">Could not load JPG preview.</div>
           </div>
-        ) : imgUrl ? (
-          <PhotoViewer ref={viewerRef} src={imgUrl} label={photo.baseName} />
         ) : (
-          <div className="review-stage">
-            <div className="review-loading">
-              <div className="scan-spinner" aria-hidden />
-            </div>
-          </div>
+          <PhotoViewer
+            ref={viewerRef}
+            previewSrc={preview && assetUrl(preview.preview)}
+            thumbSrc={preview && assetUrl(preview.thumb)}
+            originalSrc={photo.jpgPath && assetUrl(photo.jpgPath)}
+            width={preview?.width}
+            height={preview?.height}
+            orientation={photo.meta?.orientation}
+            label={photo.baseName}
+            lockView={zoomLock}
+            onToggleLock={toggleZoomLock}
+          />
         )
       ) : (
         <div className="review-stage">
@@ -317,7 +335,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
       <div className="review-meta">
         <span className="review-name">{photo.baseName}</span>
         <span className="review-meta__right">
-          <QualityReadout analysis={analysis} analyzing={analyzing} hasJpg={hasJpg} />
+          <QualityReadout preview={preview} hasJpg={hasJpg} />
           <span className="review-chips">
             <span className={`fc-chip ${hasJpg ? "" : "is-off"}`}>JPG</span>
             <span className={`fc-chip ${hasArw ? "fc-chip--raw" : "is-off"}`}>ARW</span>
@@ -367,6 +385,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
         <span><kbd>C</kbd> compare</span>
         <span><kbd>P</kbd> peaking</span>
         <span><kbd>F</kbd> fit</span>
+        <span><kbd>L</kbd> lock zoom</span>
         <span><kbd>1</kbd> 100%</span>
         <span><kbd>+</kbd>/<kbd>−</kbd> zoom</span>
       </div>
@@ -445,32 +464,22 @@ function ReviewComplete() {
   );
 }
 
-/** Compact exposure readout, from the Rust `analyze_image` command.
- * Sharpness is judged by eye via focus peaking, so no blur label here. */
-function QualityReadout({
-  analysis,
-  analyzing,
-  hasJpg,
-}: {
-  analysis: ImageAnalysis | null;
-  analyzing: boolean;
-  hasJpg: boolean;
-}) {
+/** Compact exposure readout from the preview's clipping stats. Sharpness is
+ * judged by eye via focus peaking, so no blur label here. */
+function QualityReadout({ preview, hasJpg }: { preview?: PreviewInfo; hasJpg: boolean }) {
   if (!hasJpg) return null;
-  if (analyzing && !analysis) {
+  if (!preview) {
     return <span className="review-quality review-quality--wait">analyzing…</span>;
   }
-  if (!analysis) return null;
-
-  const expTone = analysis.exposureLabel === "ok" ? "good" : "warn";
-
+  const label = exposureLabel(preview);
+  const tone = label === "ok" ? "good" : "warn";
   return (
     <span className="review-quality">
       <span
-        className={`review-metric review-metric--${expTone}`}
-        title={`Clipped highlights ${analysis.overexposedPct.toFixed(1)}% · shadows ${analysis.underexposedPct.toFixed(1)}%`}
+        className={`review-metric review-metric--${tone}`}
+        title={`Clipped highlights ${preview.overPct.toFixed(1)}% · shadows ${preview.underPct.toFixed(1)}%`}
       >
-        {analysis.exposureLabel}
+        {label}
       </span>
     </span>
   );
@@ -666,26 +675,9 @@ function Thumb({
 }) {
   const { photos, decisions } = useAppState();
   const photo = photos[index];
-  const path = photo?.jpgPath;
-  const [url, setUrl] = useState<string | null>(
-    path ? (thumbCache.get(path) ?? null) : null,
-  );
+  const preview = usePreview(photo?.hash);
+  const url = preview ? assetUrl(preview.thumb) : null;
   const btnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!path || url) return;
-    let cancelled = false;
-    loadThumbnailUrl(path, 200)
-      .then((u) => {
-        thumbCache.set(path, u);
-        if (!cancelled) setUrl(u);
-        else URL.revokeObjectURL(u); // lost the race; another mount cached it
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [path, url]);
 
   // Keep the current frame scrolled into view as the window slides.
   useEffect(() => {
@@ -794,32 +786,15 @@ function CompareCell({ index }: { index: number }) {
 
   const [includeArw, setIncludeArw] = useState(existing?.includeArw ?? false);
   const [newName, setNewName] = useState(existing?.newName ?? "");
-  const [imgUrl, setImgUrl] = useState<string | null>(null);
-  const [imgError, setImgError] = useState(false);
+  const preview = usePreview(photo?.hash);
+  const previewError = usePreviewError(photo?.hash);
   const viewerRef = useRef<PhotoViewerHandle>(null);
 
   useEffect(() => {
-    let url: string | null = null;
-    let cancelled = false;
-    setImgUrl(null);
-    setImgError(false);
-    if (photo?.jpgPath) {
-      loadImageUrl(photo.jpgPath)
-        .then((u) => {
-          if (cancelled) {
-            URL.revokeObjectURL(u);
-            return;
-          }
-          url = u;
-          setImgUrl(u);
-        })
-        .catch(() => !cancelled && setImgError(true));
+    if (photo?.hash && photo.jpgPath) {
+      void requestPreviews([{ hash: photo.hash, path: photo.jpgPath }]);
     }
-    return () => {
-      cancelled = true;
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [photo?.jpgPath]);
+  }, [photo?.hash, photo?.jpgPath]);
 
   const decision = decisions[index];
   function accept() {
@@ -835,14 +810,19 @@ function CompareCell({ index }: { index: number }) {
     <div className={`compare-cell ${decision ? `is-${decision.kind}` : ""}`}>
       <div className="compare-cell__stage">
         {hasJpg ? (
-          imgError ? (
+          previewError ? (
             <div className="review-noimg">Could not load JPG.</div>
-          ) : imgUrl ? (
-            <PhotoViewer ref={viewerRef} src={imgUrl} label={photo.baseName} />
           ) : (
-            <div className="review-loading">
-              <div className="scan-spinner" aria-hidden />
-            </div>
+            <PhotoViewer
+              ref={viewerRef}
+              previewSrc={preview && assetUrl(preview.preview)}
+              thumbSrc={preview && assetUrl(preview.thumb)}
+              originalSrc={photo.jpgPath && assetUrl(photo.jpgPath)}
+              width={preview?.width}
+              height={preview?.height}
+              orientation={photo.meta?.orientation}
+              label={photo.baseName}
+            />
           )
         ) : (
           <div className="review-noimg">ARW only — no JPG preview.</div>

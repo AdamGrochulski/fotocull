@@ -1,11 +1,10 @@
-mod analyze;
 mod copy;
 mod exif;
 mod fs_ops;
-mod image;
 mod index;
 mod manifest;
 mod names;
+mod preview;
 mod scan;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,6 +19,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        .setup(|app| {
+            preview::init(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             fs_ops::check_dir,
             fs_ops::open_folder,
@@ -27,11 +30,10 @@ pub fn run() {
             scan::scan_source,
             manifest::renamed_targets,
             index::index_media,
-            image::read_image,
-            image::read_thumbnail,
+            preview::get_previews,
+            preview::warm_previews,
             copy::copy_accepted,
-            copy::copy_videos,
-            analyze::analyze_image
+            copy::copy_videos
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
