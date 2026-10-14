@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { DirStatus } from "../types/fs";
+import type { DirStatus, FolderRole } from "../types/fs";
 
 /**
  * Open the native directory picker dialog.
@@ -12,9 +12,13 @@ export async function pickDirectory(title: string): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
-/** Validate a directory via the backend (exists / is dir / readable / writable). */
-export async function checkDir(path: string): Promise<DirStatus> {
-  return invoke<DirStatus>("check_dir", { path });
+/**
+ * Validate a directory via the backend (exists / is dir / readable / writable).
+ * Writability is only probed for the destination: the probe creates a file, and
+ * the source card must never be written to.
+ */
+export async function checkDir(path: string, role: FolderRole): Promise<DirStatus> {
+  return invoke<DirStatus>("check_dir", { path, probeWrite: role === "dest" });
 }
 
 /** Open a folder in the OS file manager. */

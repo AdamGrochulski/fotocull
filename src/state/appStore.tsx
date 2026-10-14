@@ -223,11 +223,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         if (savedSource) {
           setSourceDir(savedSource);
-          setSourceStatus(await checkDir(savedSource));
+          setSourceStatus(await checkDir(savedSource, "source"));
         }
         if (savedDest) {
           setDestDir(savedDest);
-          setDestStatus(await checkDir(savedDest));
+          setDestStatus(await checkDir(savedDest, "dest"));
         }
       } catch (err) {
         console.error("Failed to load remembered paths:", err);
@@ -248,7 +248,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const picked = await pickDirectory(title);
     if (!picked) return; // cancelled
 
-    const status = await checkDir(picked);
+    const status = await checkDir(picked, role);
     if (role === "source") {
       setSourceDir(picked);
       setSourceStatus(status);

@@ -14,6 +14,7 @@ pub struct DirStatus {
     /// The directory can be read (listing its contents).
     pub readable: bool,
     /// The directory can be written to (tested by creating and deleting a file).
+    /// Only probed for the destination; the source is never written to.
     pub writable: bool,
 }
 
@@ -31,9 +32,10 @@ fn probe_writable(dir: &Path) -> bool {
 }
 
 /// Validate a directory chosen by the user (source or destination).
-/// Modifies nothing except a momentary write-test file (removed immediately).
+/// With `probe_write` (destination only) a momentary test file is created and
+/// removed; without it nothing is written, so the source card stays untouched.
 #[tauri::command]
-pub fn check_dir(path: String) -> DirStatus {
+pub fn check_dir(path: String, probe_write: bool) -> DirStatus {
     // Runs right after a folder is picked. Some native pickers change the process
     // working directory to the chosen folder; re-anchor to a neutral temp dir so
     // we never lock a user folder against rename (see run() in lib.rs).
@@ -45,8 +47,8 @@ pub fn check_dir(path: String) -> DirStatus {
     let is_dir = p.is_dir();
     // Readability: try to list the contents.
     let readable = is_dir && std::fs::read_dir(p).is_ok();
-    // Only probe writability for real directories.
-    let writable = if is_dir { probe_writable(p) } else { false };
+    // Only probe writability for real directories, and never for the source.
+    let writable = is_dir && probe_write && probe_writable(p);
 
     DirStatus {
         exists,
