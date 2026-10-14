@@ -1,0 +1,229 @@
+/* Grid of every photo. Same darkroom ground; decisions read at a glance:
+   kept = green edge, rejected = dimmed with a warm edge. */
+.grid-view {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fc-s3);
+  padding: var(--fc-s4) var(--fc-s5) var(--fc-s3);
+  overflow: hidden;
+}
+.media-shell__body .grid-view {
+  height: 100%;
+}
+
+.grid-top {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s4);
+  flex-wrap: wrap;
+}
+.grid-top__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s2);
+}
+
+.grid-tally {
+  display: flex;
+  gap: var(--fc-s3);
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fc-text-muted);
+}
+.grid-tally .is-accept {
+  color: var(--fc-green);
+}
+.grid-tally .is-reject {
+  color: var(--fc-reject);
+}
+
+.grid-filters {
+  display: inline-flex;
+  border: 1px solid var(--fc-line-hi);
+  border-radius: var(--fc-r-pill);
+  padding: 2px;
+}
+.grid-filter {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--fc-text-muted);
+  font-family: var(--fc-sans);
+  font-size: var(--fc-fs-xs);
+  text-transform: capitalize;
+  padding: 4px 10px;
+  border-radius: var(--fc-r-pill);
+  cursor: pointer;
+}
+.grid-filter.is-active {
+  background: var(--fc-line-hi);
+  color: var(--fc-text);
+}
+
+.grid-copying {
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-sm);
+  color: var(--fc-text-muted);
+}
+
+.grid-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.grid-canvas {
+  position: relative;
+}
+.grid-empty {
+  color: var(--fc-text-faint);
+  text-align: center;
+  margin-top: var(--fc-s7);
+}
+
+.grid-tile {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--fc-r);
+  cursor: pointer;
+  user-select: none;
+}
+.grid-tile__img {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fc-ground-2);
+  border: 2px solid var(--fc-line);
+  border-radius: var(--fc-r);
+  overflow: hidden;
+}
+.grid-tile__img img {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+.grid-tile__ph {
+  width: 40%;
+  height: 40%;
+  border-radius: var(--fc-r-sm);
+  background: var(--fc-panel-hi);
+}
+.grid-tile__raw {
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+  color: var(--fc-text-faint);
+}
+
+.grid-tile.is-accept .grid-tile__img {
+  border-color: var(--fc-green);
+}
+.grid-tile.is-reject .grid-tile__img {
+  border-color: color-mix(in srgb, var(--fc-reject) 70%, transparent);
+}
+.grid-tile.is-reject img {
+  opacity: 0.4;
+}
+.grid-tile.is-mixed .grid-tile__img {
+  border-color: var(--fc-green-dim);
+}
+.grid-tile.is-selected .grid-tile__img {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fc-text) 55%, transparent);
+}
+.grid-tile.is-focused .grid-tile__img {
+  outline: 2px solid var(--fc-text);
+  outline-offset: 2px;
+}
+
+/* A collapsed burst looks like a little pile of prints. */
+.grid-tile.is-stack .grid-tile__img {
+  box-shadow: 4px 4px 0 -1px var(--fc-panel-hi), 4px 4px 0 0 var(--fc-line-hi);
+}
+.grid-tile.is-stack.is-selected .grid-tile__img {
+  box-shadow: 4px 4px 0 -1px var(--fc-panel-hi), 4px 4px 0 0 var(--fc-line-hi),
+    0 0 0 3px color-mix(in srgb, var(--fc-text) 55%, transparent);
+}
+.grid-tile__stack {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  appearance: none;
+  border: 1px solid var(--fc-line-hi);
+  border-radius: var(--fc-r-pill);
+  background: color-mix(in srgb, var(--fc-panel) 85%, transparent);
+  color: var(--fc-text);
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+  padding: 1px 8px;
+  cursor: pointer;
+}
+.grid-tile__burst {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fc-text-faint);
+}
+
+.grid-tile__cap {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s2);
+  height: 24px;
+  padding: 0 2px;
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+  color: var(--fc-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.grid-tile__name {
+  color: var(--fc-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grid-tile__mark {
+  margin-left: auto;
+}
+.grid-tile.is-accept .grid-tile__mark,
+.grid-tile.is-mixed .grid-tile__mark {
+  color: var(--fc-green);
+}
+.grid-tile.is-reject .grid-tile__mark {
+  color: var(--fc-reject);
+}
+
+.grid-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fc-s2) var(--fc-s4);
+  justify-content: center;
+  color: var(--fc-text-faint);
+  font-size: var(--fc-fs-xs);
+}
+.grid-keys span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.grid-keys__sel {
+  font-family: var(--fc-mono);
+  color: var(--fc-text-muted);
+}
+.grid-keys kbd {
+  font-family: var(--fc-mono);
+  font-size: 0.9em;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--fc-line-hi);
+  background: var(--fc-ground-2);
+  color: var(--fc-text-muted);
+}

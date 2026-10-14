@@ -63,6 +63,7 @@
   padding: 6px 9px;
   border-radius: 999px;
   cursor: pointer;
+  white-space: nowrap;
   transition: background var(--fc-t), color var(--fc-t);
 }
 .pv-tool:hover {

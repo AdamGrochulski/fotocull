@@ -57,7 +57,7 @@ export function isDestValid(s: DirStatus | null): boolean {
 export type Phase = "setup" | "scanning" | "scanned" | "review" | "summary";
 
 /** Sub-mode within the review phase. */
-export type ReviewMode = "single" | "select" | "compare";
+export type ReviewMode = "single" | "grid" | "select" | "compare";
 
 /** Which media the review screen is showing. */
 export type MediaTab = "photos" | "videos";
@@ -143,6 +143,14 @@ interface AppState {
   reviewMode: ReviewMode;
   /** Photo indices chosen for comparison (includes the anchor). */
   compareSet: number[];
+  /** Show the grid of all photos. */
+  showGrid: () => void;
+  /** Back to the single-photo view, optionally at a given photo. */
+  showSingle: (index?: number) => void;
+  /** Decide several photos at once (grid selection); `null` clears them. */
+  decideMany: (indices: number[], kind: DecisionKind | null) => void;
+  /** Open the compare grid for these photos directly (e.g. a burst). */
+  compareIndices: (indices: number[]) => void;
   /** Begin picking frames to compare (seeds with the current photo). */
   startCompareSelect: () => void;
   /** Add/remove a frame from the compare selection (capped at COMPARE_MAX). */
@@ -212,6 +220,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [decisions, setDecisions] = useState<(Decision | undefined)[]>([]);
   const [reviewMode, setReviewMode] = useState<ReviewMode>("single");
   const [compareSet, setCompareSet] = useState<number[]>([]);
+  /** Where compare returns to: the single view or the grid. */
+  const [compareFrom, setCompareFrom] = useState<"single" | "grid">("single");
 
   const [mediaTab, setMediaTab] = useState<MediaTab>("photos");
   const [videoIndex, setVideoIndex] = useState(0);
@@ -564,6 +574,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function decideMany(indices: number[], kind: DecisionKind | null) {
+    if (indices.length === 0) return;
+    // ARW toggle and rename stay as they were; only the verdict changes.
+    const nextReviewed = { ...reviewed };
+    setDecisions((prev) => {
+      const next = prev.slice();
+      for (const i of indices) {
+        const d = prev[i];
+        next[i] = kind
+          ? { kind, includeArw: d?.includeArw ?? false, newName: d?.newName ?? "" }
+          : undefined;
+      }
+      return next;
+    });
+    for (const i of indices) {
+      const hash = photos[i]?.hash;
+      if (!hash) continue;
+      if (kind) {
+        const d = decisions[i];
+        nextReviewed[hash] = {
+          kind,
+          includeArw: d?.includeArw ?? false,
+          newName: d?.newName ?? "",
+        };
+      } else {
+        delete nextReviewed[hash];
+      }
+    }
+    setReviewed(nextReviewed);
+    if (destDir) void persistSession(destDir, nextReviewed, videoReviewed, nameSuggestions);
+  }
+
   function decideCurrent(
     kind: DecisionKind,
     opts: { includeArw: boolean; newName: string },
@@ -627,15 +669,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   function openCompare() {
-    if (compareSet.length >= 2) setReviewMode("compare");
+    if (compareSet.length < 2) return;
+    setCompareFrom("single");
+    setReviewMode("compare");
+  }
+
+  function compareIndices(indices: number[]) {
+    const picked = [...new Set(indices)].sort((a, b) => a - b).slice(0, COMPARE_MAX);
+    if (picked.length < 2) return;
+    setCompareFrom(reviewMode === "grid" ? "grid" : "single");
+    setCompareSet(picked);
+    setReviewMode("compare");
   }
 
   function cancelCompare() {
-    setReviewMode("single");
+    setReviewMode(compareFrom);
     setCompareSet([]);
   }
 
   function finishCompare() {
+    if (compareFrom === "grid") {
+      // The grid shows every verdict already; just go back to it.
+      setReviewMode("grid");
+      setCompareSet([]);
+      return;
+    }
     setReviewMode("single");
     // Advance past the frames just compared to the next undecided one.
     const from = compareSet.length ? Math.max(...compareSet) + 1 : reviewIndex;
@@ -651,6 +709,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   function goToReview(index: number) {
     setReviewIndex(Math.max(0, Math.min(index, photos.length)));
+  }
+
+  function showGrid() {
+    setCompareSet([]);
+    setReviewMode("grid");
+  }
+
+  function showSingle(index?: number) {
+    if (index !== undefined) goToReview(index);
+    setCompareSet([]);
+    setReviewMode("single");
   }
 
   function backToResult() {
@@ -697,6 +766,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     goToVideo,
     reviewMode,
     compareSet,
+    showGrid,
+    showSingle,
+    decideMany,
+    compareIndices,
     startCompareSelect,
     toggleComparePick,
     openCompare,

@@ -27,6 +27,8 @@ interface PhotoViewerProps {
   lockView?: boolean;
   /** Shows a lock toggle in the toolbar when given. */
   onToggleLock?: () => void;
+  /** Viewers sharing a group follow each other's zoom and pan (compare). */
+  syncGroup?: string;
 }
 
 /** Imperative controls, driven by the review screen's keyboard shortcuts. */
@@ -56,8 +58,18 @@ const OVERSCROLL = 0.12;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-/** View shared across photos while the zoom is locked: scale + centre point. */
-const locked = { scale: 0, cx: 0.5, cy: 0.5 };
+/** A view independent of image size: scale + normalised centre point. */
+interface SharedView {
+  scale: number;
+  cx: number;
+  cy: number;
+}
+
+/** View shared across photos while the zoom is locked. */
+const locked: SharedView = { scale: 0, cx: 0.5, cy: 0.5 };
+
+/** Synced viewers (compare): each group's members get every user move. */
+const syncGroups = new Map<string, Set<(v: SharedView, from: symbol) => void>>();
 
 /**
  * Canvas 2D photo inspector: fit / 100% / cursor-anchored wheel zoom / drag pan.
@@ -83,6 +95,7 @@ export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
       label,
       lockView,
       onToggleLock,
+      syncGroup,
     },
     ref,
   ) {
@@ -159,8 +172,13 @@ export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
     return Math.max(w, h) / Math.max(dims.current.w, dims.current.h);
   }
 
+  const syncId = useRef(Symbol("viewer"));
+  const syncGroupRef = useRef(syncGroup);
+  syncGroupRef.current = syncGroup;
+
+  // `publish`: the user moved this view, so synced viewers should follow.
   const applyView = useCallback(
-    (next: Partial<typeof view.current>) => {
+    (next: Partial<typeof view.current>, publish = false) => {
       const merged = { ...view.current, ...next };
       // Pan clamp, per axis: if the scaled image fits within the canvas on that
       // axis it locks centred; if it's larger you can pan its edges to the frame
@@ -188,6 +206,11 @@ export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
         locked.scale = merged.scale;
         locked.cx = (cw / 2 - merged.offsetX) / iw;
         locked.cy = (ch / 2 - merged.offsetY) / ih;
+        const group = syncGroupRef.current && syncGroups.get(syncGroupRef.current);
+        if (publish && group) {
+          const shared = { ...locked };
+          group.forEach((follow) => follow(shared, syncId.current));
+        }
       }
       view.current = merged;
       setZoomPct(Math.round(view.current.scale * 100));
@@ -210,33 +233,60 @@ export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
     return Math.min(canvas.clientWidth / w, canvas.clientHeight / h);
   }, []);
 
-  const fitToView = useCallback(() => {
-    const canvas = canvasRef.current;
-    const { w, h } = dims.current;
-    if (!canvas || !w || !h) return;
-    const fit = fitScale();
-    applyView({
-      scale: fit,
-      fit,
-      offsetX: (canvas.clientWidth - w * fit) / 2,
-      offsetY: (canvas.clientHeight - h * fit) / 2,
-    });
-  }, [applyView, fitScale]);
+  const fitToView = useCallback(
+    (publish = false) => {
+      const canvas = canvasRef.current;
+      const { w, h } = dims.current;
+      if (!canvas || !w || !h) return;
+      const fit = fitScale();
+      applyView(
+        {
+          scale: fit,
+          fit,
+          offsetX: (canvas.clientWidth - w * fit) / 2,
+          offsetY: (canvas.clientHeight - h * fit) / 2,
+        },
+        publish,
+      );
+    },
+    [applyView, fitScale],
+  );
+
+  /** Show `v` (from the lock or a synced viewer) in this viewer's own size. */
+  const applyShared = useCallback(
+    (v: SharedView) => {
+      const canvas = canvasRef.current;
+      const { w, h } = dims.current;
+      if (!canvas || !w || !h || !v.scale) return;
+      applyView({
+        fit: fitScale(),
+        scale: v.scale,
+        offsetX: canvas.clientWidth / 2 - v.cx * w * v.scale,
+        offsetY: canvas.clientHeight / 2 - v.cy * h * v.scale,
+      });
+    },
+    [applyView, fitScale],
+  );
+
+  // Join the sync group: follow moves made in the other viewers.
+  useEffect(() => {
+    if (!syncGroup) return;
+    const follow = (v: SharedView, from: symbol) => {
+      if (from !== syncId.current) applyShared(v);
+    };
+    let group = syncGroups.get(syncGroup);
+    if (!group) syncGroups.set(syncGroup, (group = new Set()));
+    group.add(follow);
+    return () => {
+      group!.delete(follow);
+    };
+  }, [syncGroup, applyShared]);
 
   /** Restore the shared locked view (same scale, same relative centre). */
   const applyLocked = useCallback(() => {
-    const canvas = canvasRef.current;
-    const { w, h } = dims.current;
-    if (!canvas || !w || !h || !locked.scale) return fitToView();
-    const fit = fitScale();
-    const scale = locked.scale;
-    applyView({
-      fit,
-      scale,
-      offsetX: canvas.clientWidth / 2 - locked.cx * w * scale,
-      offsetY: canvas.clientHeight / 2 - locked.cy * h * scale,
-    });
-  }, [applyView, fitScale, fitToView]);
+    if (!locked.scale) fitToView();
+    else applyShared({ ...locked });
+  }, [applyShared, fitToView]);
 
   const zoomAround = useCallback(
     (mx: number, my: number, factor: number) => {
@@ -246,11 +296,14 @@ export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
       if (target === scale) return;
       const ix = (mx - offsetX) / scale;
       const iy = (my - offsetY) / scale;
-      applyView({
-        scale: target,
-        offsetX: mx - ix * target,
-        offsetY: my - iy * target,
-      });
+      applyView(
+        {
+          scale: target,
+          offsetX: mx - ix * target,
+          offsetY: my - iy * target,
+        },
+        true,
+      );
     },
     [applyView],
   );
@@ -441,7 +494,7 @@ export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
   useImperativeHandle(
     ref,
     () => ({
-      fit: fitToView,
+      fit: () => fitToView(true),
       actual: () => zoomCentered(1, true),
       zoomIn: () => zoomCentered(ZOOM_STEP),
       zoomOut: () => zoomCentered(1 / ZOOM_STEP),
@@ -469,10 +522,13 @@ export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
     const dx = e.clientX - drag.current.x;
     const dy = e.clientY - drag.current.y;
     drag.current = { x: e.clientX, y: e.clientY };
-    applyView({
-      offsetX: view.current.offsetX + dx,
-      offsetY: view.current.offsetY + dy,
-    });
+    applyView(
+      {
+        offsetX: view.current.offsetX + dx,
+        offsetY: view.current.offsetY + dy,
+      },
+      true,
+    );
   }
   function onPointerUp(e: React.PointerEvent) {
     drag.current = null;
@@ -488,7 +544,7 @@ export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     // Toggle between fit and 100%.
-    if (view.current.scale > view.current.fit * 1.05) fitToView();
+    if (view.current.scale > view.current.fit * 1.05) fitToView(true);
     else zoomAround(mx, my, 1 / view.current.scale);
   }
 
@@ -525,7 +581,7 @@ export const PhotoViewer = forwardRef<PhotoViewerHandle, PhotoViewerProps>(
             +
           </button>
           <span className="pv-sep" />
-          <button className="pv-tool" onClick={fitToView} title="Fit to view">
+          <button className="pv-tool" onClick={() => fitToView(true)} title="Fit to view">
             Fit
           </button>
           <button className="pv-tool" onClick={() => zoomCentered(1, true)} title="Actual pixels">

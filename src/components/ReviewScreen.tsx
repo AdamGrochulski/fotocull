@@ -18,6 +18,7 @@ import {
 } from "../lib/previews";
 import { previewFrames, thumbFrames } from "../lib/frames";
 import { PhotoViewer, type PhotoViewerHandle } from "./PhotoViewer";
+import { GridView } from "./GridView";
 import type { MediaMeta, Photo } from "../types/photo";
 import "./ReviewScreen.css";
 
@@ -81,6 +82,9 @@ export function ReviewScreen() {
   if (reviewMode === "compare") {
     return <CompareView />;
   }
+  if (reviewMode === "grid" && photos.length > 0) {
+    return <GridView />;
+  }
 
   // Past the last photo → review is complete.
   if (reviewIndex >= photos.length) {
@@ -104,6 +108,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
     startCompareSelect,
     openCompare,
     cancelCompare,
+    showGrid,
   } = useAppState();
   const selecting = reviewMode === "select";
 
@@ -149,6 +154,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
     compare: () => {},
     escape: () => {},
     toggleLock: () => {},
+    grid: () => {},
   });
   actions.current = {
     accept,
@@ -157,6 +163,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
     compare: () => (selecting ? openCompare() : startCompareSelect()),
     escape: () => selecting && cancelCompare(),
     toggleLock: toggleZoomLock,
+    grid: () => !selecting && showGrid(),
   };
 
   // Global shortcuts. Photo controls (P/F/1/±) drive the PhotoViewer imperatively.
@@ -222,6 +229,11 @@ function ReviewCard({ photo }: { photo: Photo }) {
           e.preventDefault();
           if (!e.repeat) actions.current.toggleLock();
           break;
+        case "g":
+        case "G":
+          e.preventDefault();
+          if (!e.repeat) actions.current.grid();
+          break;
         case "1":
           e.preventDefault();
           v?.actual();
@@ -256,6 +268,14 @@ function ReviewCard({ photo }: { photo: Photo }) {
           <span>{photos.length}</span>
         </div>
         <span className="review-top__right">
+          <button
+            className="fc-btn"
+            onClick={showGrid}
+            disabled={selecting}
+            title="All photos in a grid, bursts stacked (G)"
+          >
+            ▦ Grid
+          </button>
           <button
             className="fc-btn"
             onClick={startCompareSelect}
@@ -383,6 +403,7 @@ function ReviewCard({ photo }: { photo: Photo }) {
         <span><kbd>Backspace</kbd>/<kbd>U</kbd> undo</span>
         <span><kbd>R</kbd> ARW</span>
         <span><kbd>C</kbd> compare</span>
+        <span><kbd>G</kbd> grid</span>
         <span><kbd>P</kbd> peaking</span>
         <span><kbd>F</kbd> fit</span>
         <span><kbd>L</kbd> lock zoom</span>
@@ -404,6 +425,7 @@ function ReviewComplete() {
     copyStage,
     copyProgress,
     runCopy,
+    showGrid,
   } = useAppState();
 
   const accepted = decisions.filter((d) => d?.kind === "accept").length;
@@ -435,6 +457,9 @@ function ReviewComplete() {
           <div className="review-done-actions">
             <button className="fc-btn" onClick={reviewPrev}>
               ← Back to last photo
+            </button>
+            <button className="fc-btn" onClick={showGrid} disabled={photos.length === 0}>
+              ▦ Look over in grid
             </button>
             <button
               className="fc-btn fc-btn--primary"
@@ -739,9 +764,13 @@ function ExifReadout({ exif }: { exif?: MediaMeta | null }) {
 /** Side-by-side compare grid. Each cell is a full mini-inspector (zoom/pan/
  * peaking) with its own ARW toggle, rename and accept/reject. Decisions apply to
  * that specific frame and don't advance the main review. */
+/** Synced zoom in compare survives reopening it. */
+let compareSyncPref = true;
+
 function CompareView() {
   const { compareSet, cancelCompare, finishCompare } = useAppState();
   const indices = [...compareSet].sort((a, b) => a - b);
+  const [sync, setSync] = useState(compareSyncPref);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -760,9 +789,15 @@ function CompareView() {
         <button className="fc-btn" onClick={cancelCompare} title="Back (Esc)">
           ← Back
         </button>
-        <span className="compare-title">
-          Comparing {indices.length} frames — decide each
-        </span>
+        <span className="compare-title">Comparing {indices.length} frames, decide each</span>
+        <label className="review-toggle" title="Zoom and pan all frames together">
+          <input
+            type="checkbox"
+            checked={sync}
+            onChange={(e) => setSync((compareSyncPref = e.currentTarget.checked))}
+          />
+          <span>Sync zoom</span>
+        </label>
         <button className="fc-btn fc-btn--primary" onClick={finishCompare}>
           Done →
         </button>
@@ -770,14 +805,14 @@ function CompareView() {
 
       <div className="compare-grid" data-count={indices.length}>
         {indices.map((i) => (
-          <CompareCell key={i} index={i} />
+          <CompareCell key={i} index={i} sync={sync} />
         ))}
       </div>
     </div>
   );
 }
 
-function CompareCell({ index }: { index: number }) {
+function CompareCell({ index, sync }: { index: number; sync: boolean }) {
   const { photos, decisions, nameSuggestions, decideAt } = useAppState();
   const photo = photos[index];
   const hasArw = !!photo?.arwPath;
@@ -822,6 +857,7 @@ function CompareCell({ index }: { index: number }) {
               height={preview?.height}
               orientation={photo.meta?.orientation}
               label={photo.baseName}
+              syncGroup={sync ? "compare" : undefined}
             />
           )
         ) : (
