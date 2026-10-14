@@ -27,13 +27,11 @@ Built for a **Sony A6000** workflow, where every frame is a pair — a RAW `.ARW
 and a `.JPG` — plus the odd `.MP4` clip — but it works with any folder of
 JPG/ARW/MP4 files.
 
-> **macOS first launch.** The installers aren't code-signed yet, so Gatekeeper —
-> especially on Apple Silicon — may refuse the app with *"fotocull is damaged"*.
-> Move `fotocull.app` to `/Applications`, then clear the quarantine flag once:
-> ```bash
-> xattr -cr /Applications/fotocull.app
-> ```
-> and open it normally. (Tracked under *What's next → signed installers*.)
+> **First launch.** The installers aren't code-signed yet. On Windows,
+> SmartScreen may warn: *More info → Run anyway*. On macOS, open the app once,
+> then go to *System Settings → Privacy & Security* and click *Open Anyway*.
+> After that fotocull keeps itself up to date: new versions are offered on the
+> start screen and install with one click.
 
 <!-- TODO screenshot: review screen — photo + filmstrip + EXIF + Reject/Accept
 <div align="center">
@@ -217,6 +215,7 @@ straight to GitHub Releases.
 - [x] Session resume + permanent reject skip-list
 - [x] Video (MP4) review tab
 - [x] Grid with burst stacks, cached previews, shoot report
+- [x] Automatic updates, one universal macOS build
 - [ ] Signed installers (SmartScreen / Gatekeeper clean)
 - [ ] Optional ARW-decoded preview
 

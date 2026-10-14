@@ -35,7 +35,7 @@
     "category": "Photography",
     "shortDescription": "Fast photo culling (JPG+ARW) from an SD card",
     "longDescription": "fotocull is a fast, keyboard-driven culling tool for camera photos. Scan an SD card, review JPGs Tinder-style, keep or reject, optionally rename, and copy accepted shots (with their ARW companions) to a destination folder. Already-copied photos are skipped by content hash, so re-runs only show what's new.",
-    "copyright": "Copyright \u00a9 2026 octoone",
+    "copyright": "Copyright © 2026 octoone",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -44,11 +44,34 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-"
     },
     "linux": {
       "deb": {
         "depends": []
+      }
+    },
+    "windows": {
+      "nsis": {
+        "languages": [
+          "English",
+          "Polish"
+        ],
+        "customLanguageFiles": {
+          "Polish": "nsis/Polish.nsh"
+        }
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE2MUZEODQ3MzM4MUUyQjUKUldTMTRvRXpSOWdmRnAwdUd3bjY0YlNSdWZnSng3OVNOUlkwL0FuV1RUQ1Y5SGJjV3B3K3czelQK",
+      "endpoints": [
+        "https://github.com/AdamGrochulski/fotocull/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

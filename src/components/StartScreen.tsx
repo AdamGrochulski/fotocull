@@ -1,6 +1,7 @@
 import { useAppState, isSourceValid, isDestValid } from "../state/appStore";
 import { baseName } from "../lib/paths";
 import type { DirStatus, FolderRole } from "../types/fs";
+import { UpdateBanner } from "./UpdateBanner";
 import "./StartScreen.css";
 
 /**
@@ -18,6 +19,8 @@ export function StartScreen() {
           Fast photo culling from your SD card — keep, reject, copy.
         </p>
       </header>
+
+      <UpdateBanner />
 
       <section className="folder-grid">
         <FolderCard role="source" />

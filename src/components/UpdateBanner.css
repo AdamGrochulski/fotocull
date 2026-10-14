@@ -1,0 +1,25 @@
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s4);
+  max-width: 720px;
+  width: 100%;
+  padding: var(--fc-s3) var(--fc-s4);
+  border: 1px solid var(--fc-green-dim);
+  border-radius: var(--fc-r);
+  background: color-mix(in srgb, var(--fc-green) 8%, var(--fc-panel));
+  font-size: var(--fc-fs-sm);
+  text-align: left;
+}
+.update-banner__text {
+  color: var(--fc-text-muted);
+}
+.update-banner__text strong {
+  color: var(--fc-green);
+  font-family: var(--fc-mono);
+}
+.update-banner__actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--fc-s2);
+}

@@ -16,10 +16,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest # Apple silicon
-            args: "--target aarch64-apple-darwin"
-          - platform: macos-latest # Intel
-            args: "--target x86_64-apple-darwin"
+          # One universal app for Intel and Apple silicon Macs, ad-hoc signed
+          # (signingIdentity "-" in tauri.conf.json).
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
           - platform: ubuntu-22.04
             args: ""
           - platform: windows-latest
@@ -58,13 +58,26 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # Updater artifacts (signed update bundles + latest.json) are produced
+      # only here: they need the private key, which local builds don't have.
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "fotocull ${{ github.ref_name }}"
+          releaseBody: |
+            **Which file do I need?**
+            - Windows: the file ending in `_x64-setup.exe`
+            - macOS (Intel and Apple silicon): the file ending in `_universal.dmg`
+            - Linux: the `.AppImage` (or the `.deb` on Debian/Ubuntu)
+
+            The other files (`.sig`, `.tar.gz`, `latest.json`) are for automatic updates; you don't need them.
+
+            **First launch.** The installers aren't code-signed yet. Windows may show SmartScreen: *More info → Run anyway*. On macOS open the app once, then *System Settings → Privacy & Security → Open Anyway*. After that, fotocull updates itself from the start screen.
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config src-tauri/tauri.updater.conf.json
