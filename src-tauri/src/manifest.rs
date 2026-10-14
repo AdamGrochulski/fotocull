@@ -78,8 +78,16 @@ pub fn save_manifest(dest_dir: &str, manifest: &Manifest) -> Result<(), String> 
     let json = serde_json::to_string_pretty(manifest)
         .map_err(|e| format!("Cannot serialize manifest: {e}"))?;
 
+    // Flush the temp file before the rename: otherwise a power cut or a yanked
+    // drive can persist the rename but not the data, leaving an empty manifest.
     let tmp = dir.join("manifest.json.tmp");
-    std::fs::write(&tmp, json).map_err(|e| format!("Cannot write manifest: {e}"))?;
+    let mut file =
+        std::fs::File::create(&tmp).map_err(|e| format!("Cannot write manifest: {e}"))?;
+    std::io::Write::write_all(&mut file, json.as_bytes())
+        .map_err(|e| format!("Cannot write manifest: {e}"))?;
+    file.sync_all()
+        .map_err(|e| format!("Cannot flush manifest: {e}"))?;
+    drop(file);
     std::fs::rename(&tmp, &path).map_err(|e| format!("Cannot commit manifest: {e}"))?;
     Ok(())
 }
