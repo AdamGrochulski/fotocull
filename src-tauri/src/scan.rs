@@ -48,19 +48,122 @@ struct ScanProgress {
     images_found: usize,
 }
 
-/// Accumulator built during the walk — before assembling into a `Photo`.
+/// A JPG or ARW found during the walk, before pairing.
+struct FoundFile {
+    dir: String,
+    stem: String,
+    full: String,
+    is_raw: bool,
+}
+
+/// Accumulator for one pair while grouping.
 #[derive(Default)]
 struct Entry {
+    stem: String,
     jpg_path: Option<String>,
     arw_path: Option<String>,
     jpg_dir: Option<String>,
     arw_dir: Option<String>,
 }
 
+impl Entry {
+    fn into_photo(self) -> Photo {
+        Photo {
+            base_name: self.stem,
+            jpg_path: self.jpg_path,
+            arw_path: self.arw_path,
+            source_dir: self.jpg_dir.or(self.arw_dir).unwrap_or_default(),
+        }
+    }
+}
+
 fn parent_dir(p: &Path) -> String {
     p.parent()
         .map(|d| d.to_string_lossy().to_string())
         .unwrap_or_default()
+}
+
+/// Group JPG and ARW files into photos.
+///
+/// A pair is a JPG and an ARW with the same stem in the **same folder**. Cards
+/// reuse file numbers across folders (`100MSDCF/DSC00001` and
+/// `101MSDCF/DSC00001` after a counter reset, or two cameras dumped into one
+/// folder), so pairing by stem alone would silently drop a photo or marry one
+/// shot's JPG to another shot's RAW. As a fallback, a lone JPG and a lone ARW
+/// in different folders are paired only when the stem is unambiguous: exactly
+/// one unpaired file of each kind carries it.
+fn pair_files(files: Vec<FoundFile>) -> Vec<Photo> {
+    let mut entries: HashMap<(String, String), Entry> = HashMap::new();
+    let mut extra: Vec<Entry> = Vec::new();
+
+    for f in files {
+        let key = (f.dir.clone(), f.stem.to_lowercase());
+        let e = entries.entry(key).or_default();
+        let slot_taken = if f.is_raw { e.arw_path.is_some() } else { e.jpg_path.is_some() };
+        if slot_taken {
+            // Same stem twice in one folder (e.g. `.jpg` next to `.jpeg`): keep
+            // both as separate photos instead of overwriting.
+            let mut alone = Entry { stem: f.stem, ..Default::default() };
+            if f.is_raw {
+                alone.arw_path = Some(f.full);
+                alone.arw_dir = Some(f.dir);
+            } else {
+                alone.jpg_path = Some(f.full);
+                alone.jpg_dir = Some(f.dir);
+            }
+            extra.push(alone);
+            continue;
+        }
+        if e.stem.is_empty() {
+            e.stem = f.stem;
+        }
+        if f.is_raw {
+            e.arw_path = Some(f.full);
+            e.arw_dir = Some(f.dir);
+        } else {
+            e.jpg_path = Some(f.full);
+            e.jpg_dir = Some(f.dir);
+        }
+    }
+
+    let mut done: Vec<Entry> = Vec::new();
+    // Unpaired entries by lowercase stem, split by which half they hold.
+    let mut lone_jpg: HashMap<String, Vec<Entry>> = HashMap::new();
+    let mut lone_arw: HashMap<String, Vec<Entry>> = HashMap::new();
+    for e in entries.into_values().chain(extra) {
+        match (&e.jpg_path, &e.arw_path) {
+            (Some(_), Some(_)) => done.push(e),
+            (Some(_), None) => lone_jpg.entry(e.stem.to_lowercase()).or_default().push(e),
+            _ => lone_arw.entry(e.stem.to_lowercase()).or_default().push(e),
+        }
+    }
+
+    for (stem, mut jpgs) in lone_jpg {
+        match lone_arw.remove(&stem) {
+            Some(mut arws) if jpgs.len() == 1 && arws.len() == 1 => {
+                let mut jpg = jpgs.pop().unwrap();
+                let arw = arws.pop().unwrap();
+                jpg.arw_path = arw.arw_path;
+                jpg.arw_dir = arw.arw_dir;
+                done.push(jpg);
+            }
+            Some(arws) => {
+                done.extend(jpgs);
+                done.extend(arws);
+            }
+            None => done.extend(jpgs),
+        }
+    }
+    done.extend(lone_arw.into_values().flatten());
+
+    let mut photos: Vec<Photo> = done.into_iter().map(Entry::into_photo).collect();
+    // Camera order: by name, then folder so same-named shots stay predictable.
+    photos.sort_by(|a, b| {
+        a.base_name
+            .cmp(&b.base_name)
+            .then_with(|| a.source_dir.cmp(&b.source_dir))
+    });
+    photos
 }
 
 /// Whether `stem` is `base` followed by one letter and one or more digits — the
@@ -102,8 +205,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<ScanResult, String> {
         return Err(format!("Source folder does not exist: {root}"));
     }
 
-    // Map key: base name (stem) — pairing is independent of directory.
-    let mut entries: HashMap<String, Entry> = HashMap::new();
+    let mut found: Vec<FoundFile> = Vec::new();
     let mut videos: Vec<Video> = Vec::new();
     let mut files_scanned: usize = 0;
 
@@ -131,16 +233,12 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<ScanResult, String> {
         let dir = parent_dir(path);
 
         match ext.as_str() {
-            "jpg" | "jpeg" => {
-                let e = entries.entry(stem).or_default();
-                e.jpg_path = Some(full);
-                e.jpg_dir = Some(dir);
-            }
-            "arw" => {
-                let e = entries.entry(stem).or_default();
-                e.arw_path = Some(full);
-                e.arw_dir = Some(dir);
-            }
+            "jpg" | "jpeg" | "arw" => found.push(FoundFile {
+                dir,
+                stem,
+                full,
+                is_raw: ext == "arw",
+            }),
             "mp4" => {
                 videos.push(Video {
                     base_name: stem,
@@ -157,7 +255,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<ScanResult, String> {
                 "scan://progress",
                 ScanProgress {
                     files_scanned,
-                    images_found: entries.len(),
+                    images_found: found.len(),
                 },
             );
         }
@@ -168,7 +266,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<ScanResult, String> {
         "scan://progress",
         ScanProgress {
             files_scanned,
-            images_found: entries.len(),
+            images_found: found.len(),
         },
     );
 
@@ -188,21 +286,105 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<ScanResult, String> {
     let video_stems: std::collections::HashSet<&str> =
         videos.iter().map(|v| v.base_name.as_str()).collect();
 
-    // Assemble the result. source_dir: prefer the JPG directory, else the ARW one.
-    let mut photos: Vec<Photo> = entries
+    let found: Vec<FoundFile> = found
         .into_iter()
-        .filter(|(base_name, _)| !is_video_companion(base_name, &video_stems))
-        .map(|(base_name, e)| Photo {
-            base_name,
-            jpg_path: e.jpg_path,
-            arw_path: e.arw_path,
-            source_dir: e.jpg_dir.or(e.arw_dir).unwrap_or_default(),
-        })
+        .filter(|f| f.is_raw || !is_video_companion(&f.stem, &video_stems))
         .collect();
-
-    // Sort by base name — the camera's sequential order.
-    photos.sort_by(|a, b| a.base_name.cmp(&b.base_name));
+    let photos = pair_files(found);
     videos.sort_by(|a, b| a.base_name.cmp(&b.base_name));
 
     Ok(ScanResult { photos, videos })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn f(dir: &str, name: &str) -> FoundFile {
+        let (stem, ext) = name.rsplit_once('.').unwrap();
+        FoundFile {
+            dir: dir.to_string(),
+            stem: stem.to_string(),
+            full: format!("{dir}/{name}"),
+            is_raw: ext.eq_ignore_ascii_case("arw"),
+        }
+    }
+
+    fn summary(photos: &[Photo]) -> Vec<(String, Option<String>, Option<String>)> {
+        photos
+            .iter()
+            .map(|p| (p.base_name.clone(), p.jpg_path.clone(), p.arw_path.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn pairs_within_one_folder() {
+        let photos = pair_files(vec![f("100", "DSC1.JPG"), f("100", "DSC1.ARW")]);
+        assert_eq!(
+            summary(&photos),
+            vec![("DSC1".into(), Some("100/DSC1.JPG".into()), Some("100/DSC1.ARW".into()))]
+        );
+    }
+
+    #[test]
+    fn same_stem_in_two_folders_stays_two_photos() {
+        let photos = pair_files(vec![
+            f("100", "DSC1.JPG"),
+            f("100", "DSC1.ARW"),
+            f("101", "DSC1.JPG"),
+            f("101", "DSC1.ARW"),
+        ]);
+        assert_eq!(photos.len(), 2);
+        for p in &photos {
+            let jpg_dir = p.jpg_path.as_deref().unwrap().split('/').next();
+            let arw_dir = p.arw_path.as_deref().unwrap().split('/').next();
+            assert_eq!(jpg_dir, arw_dir, "JPG and ARW must come from the same folder");
+        }
+    }
+
+    #[test]
+    fn lone_jpg_never_borrows_another_folders_raw() {
+        // 100 has a full pair, 101 only a JPG: the 101 JPG must stay JPG-only.
+        let photos = pair_files(vec![
+            f("100", "DSC1.JPG"),
+            f("100", "DSC1.ARW"),
+            f("101", "DSC1.JPG"),
+        ]);
+        assert_eq!(photos.len(), 2);
+        let lone = photos.iter().find(|p| p.arw_path.is_none()).unwrap();
+        assert_eq!(lone.jpg_path.as_deref(), Some("101/DSC1.JPG"));
+    }
+
+    #[test]
+    fn unambiguous_split_pair_is_joined_across_folders() {
+        let photos = pair_files(vec![f("jpg", "DSC7.JPG"), f("raw", "DSC7.ARW")]);
+        assert_eq!(
+            summary(&photos),
+            vec![("DSC7".into(), Some("jpg/DSC7.JPG".into()), Some("raw/DSC7.ARW".into()))]
+        );
+    }
+
+    #[test]
+    fn ambiguous_split_pairs_stay_apart() {
+        let photos = pair_files(vec![
+            f("a", "DSC7.JPG"),
+            f("b", "DSC7.JPG"),
+            f("c", "DSC7.ARW"),
+        ]);
+        assert_eq!(photos.len(), 3);
+        assert!(photos.iter().all(|p| p.jpg_path.is_none() || p.arw_path.is_none()));
+    }
+
+    #[test]
+    fn jpg_and_jpeg_with_one_stem_are_both_kept() {
+        let photos = pair_files(vec![f("100", "IMG1.jpg"), f("100", "IMG1.jpeg")]);
+        assert_eq!(photos.len(), 2);
+    }
+
+    #[test]
+    fn stem_case_does_not_break_a_pair() {
+        let photos = pair_files(vec![f("100", "dsc1.jpg"), f("100", "DSC1.ARW")]);
+        assert_eq!(photos.len(), 1);
+        assert!(photos[0].jpg_path.is_some() && photos[0].arw_path.is_some());
+    }
 }

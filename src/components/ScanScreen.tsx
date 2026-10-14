@@ -109,7 +109,7 @@ export function ScanScreen() {
                 </thead>
                 <tbody>
                   {photos.map((p) => (
-                    <tr key={p.baseName + p.sourceDir}>
+                    <tr key={p.jpgPath ?? p.arwPath}>
                       <td>{p.baseName}</td>
                       <td>{p.jpgPath ? "✓" : "—"}</td>
                       <td>{p.arwPath ? "✓" : "—"}</td>
