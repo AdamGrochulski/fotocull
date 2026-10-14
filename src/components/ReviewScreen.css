@@ -1,5 +1,7 @@
 .review {
   height: 100vh;
+  /* Fill the width up to the cap; auto margins alone would shrink-wrap it. */
+  width: 100%;
   max-width: 1600px;
   margin: 0 auto;
   padding: var(--fc-s4) var(--fc-s5) var(--fc-s5);
@@ -105,7 +107,7 @@
 .review-thumb {
   position: relative;
   flex: 0 0 auto;
-  height: 52px;
+  height: 46px;
   padding: 0;
   border: 2px solid var(--fc-line);
   border-radius: var(--fc-r-sm, 6px);
@@ -290,11 +292,39 @@
   padding: var(--fc-s6);
 }
 
-.review-meta {
+.review-meta,
+.review-info {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--fc-s3);
+}
+/* Single view: name, EXIF and readouts share one line to leave the height to
+   the photo. EXIF gives way first on narrow windows. */
+.review-info {
+  min-height: 28px;
+}
+.review-info .review-exif {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.review-info .review-meta__right {
+  flex: 0 0 auto;
+}
+
+/* ARW toggle, rename and the two verdict buttons on one row. */
+.review-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--fc-s3);
+}
+.review-bar .review-btn {
+  flex: 0 0 auto;
+  min-width: 140px;
+  font-size: var(--fc-fs-base);
+  padding: 0.65em 1.2em;
 }
 .review-name {
   font-family: var(--fc-mono);
@@ -488,6 +518,19 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4em;
+}
+.review-keys__more {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--fc-text-faint);
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+.review-keys__more:hover {
+  color: var(--fc-text-muted);
 }
 .review-keys kbd {
   font-family: var(--fc-mono);

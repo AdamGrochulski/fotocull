@@ -352,8 +352,9 @@ function ReviewCard({ photo }: { photo: Photo }) {
 
       <Filmstrip />
 
-      <div className="review-meta">
+      <div className="review-info">
         <span className="review-name">{photo.baseName}</span>
+        <ExifReadout exif={photo.meta} />
         <span className="review-meta__right">
           <QualityReadout preview={preview} hasJpg={hasJpg} />
           <span className="review-chips">
@@ -363,18 +364,18 @@ function ReviewCard({ photo }: { photo: Photo }) {
         </span>
       </div>
 
-      <ExifReadout exif={photo.meta} />
-
-      <div className="review-controls">
-        <label className={`review-toggle ${hasArw ? "" : "is-disabled"}`}>
+      <div className="review-bar">
+        <label
+          className={`review-toggle ${hasArw ? "" : "is-disabled"}`}
+          title={hasArw ? "Copy the RAW file too (R)" : "This photo has no ARW"}
+        >
           <input
             type="checkbox"
             checked={hasArw ? includeArw : false}
             disabled={!hasArw}
             onChange={(e) => setIncludeArw(e.currentTarget.checked)}
           />
-          <span>Copy ARW too</span>
-          {!hasArw && <span className="review-toggle__hint">(no ARW)</span>}
+          <span>+ ARW</span>
         </label>
 
         <RenameField
@@ -384,32 +385,81 @@ function ReviewCard({ photo }: { photo: Photo }) {
           onAccept={accept}
           placeholder={`Rename… (default: ${photo.baseName})`}
         />
+
+        {!selecting && (
+          <>
+            <button className="fc-btn fc-btn--reject review-btn" onClick={reject} title="Reject (← or X)">
+              ← Reject
+            </button>
+            <button className="fc-btn fc-btn--primary review-btn" onClick={accept} title="Accept (→, A or Space)">
+              Accept →
+            </button>
+          </>
+        )}
       </div>
 
-      {!selecting && (
-        <div className="review-actions">
-          <button className="fc-btn fc-btn--reject review-btn" onClick={reject}>
-            ← Reject
-          </button>
-          <button className="fc-btn fc-btn--primary review-btn" onClick={accept}>
-            Accept →
-          </button>
-        </div>
-      )}
+      <KeyLegend
+        primary={[
+          [["←", "X"], "reject"],
+          [["→", "A"], "accept"],
+          [["U"], "undo"],
+          [["G"], "grid"],
+          [["1"], "100%"],
+        ]}
+        more={[
+          [["Space"], "accept"],
+          [["Backspace"], "undo"],
+          [["R"], "ARW"],
+          [["C"], "compare"],
+          [["P"], "peaking"],
+          [["F"], "fit"],
+          [["L"], "lock zoom"],
+          [["+", "−"], "zoom"],
+        ]}
+      />
+    </div>
+  );
+}
 
-      <div className="review-keys" aria-hidden>
-        <span><kbd>←</kbd>/<kbd>X</kbd> reject</span>
-        <span><kbd>→</kbd>/<kbd>A</kbd>/<kbd>Space</kbd> accept</span>
-        <span><kbd>Backspace</kbd>/<kbd>U</kbd> undo</span>
-        <span><kbd>R</kbd> ARW</span>
-        <span><kbd>C</kbd> compare</span>
-        <span><kbd>G</kbd> grid</span>
-        <span><kbd>P</kbd> peaking</span>
-        <span><kbd>F</kbd> fit</span>
-        <span><kbd>L</kbd> lock zoom</span>
-        <span><kbd>1</kbd> 100%</span>
-        <span><kbd>+</kbd>/<kbd>−</kbd> zoom</span>
-      </div>
+type KeyHint = [string[], string];
+
+/** Whether the full shortcut list is open (survives photo changes). */
+let showAllKeysPref = false;
+
+/**
+ * One quiet line of the main shortcuts; `?` (or the toggle) reveals the rest.
+ * Keeps the photo as large as possible on small screens.
+ */
+export function KeyLegend({ primary, more }: { primary: KeyHint[]; more: KeyHint[] }) {
+  const [all, setAll] = useState(showAllKeysPref);
+  const toggle = () => setAll((v) => (showAllKeysPref = !v));
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (e.key === "?" && !e.repeat) toggle();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const hint = ([keys, label]: KeyHint) => (
+    <span key={label + keys.join()}>
+      {keys.map((k, i) => (
+        <span key={k}>
+          {i > 0 && "/"}
+          <kbd>{k}</kbd>
+        </span>
+      ))}{" "}
+      {label}
+    </span>
+  );
+  return (
+    <div className="review-keys">
+      {primary.map(hint)}
+      {all && more.map(hint)}
+      <button className="review-keys__more" onClick={toggle} title="All shortcuts (?)">
+        {all ? "less" : "? more"}
+      </button>
     </div>
   );
 }
