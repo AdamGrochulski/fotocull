@@ -49,17 +49,33 @@ Every action is a key. Keep your hand on the arrows and blow through a shoot.
 
 | | Action | Key |
 |--|--------|-----|
-| ✅ | Accept | `→` / `Space` |
-| ❌ | Reject | `←` |
+| ✅ | Accept | `→` / `A` / `Space` |
+| ❌ | Reject | `←` / `X` |
 | ↩️ | Undo | `Backspace` / `U` |
 | 🎞️ | Copy ARW too | `R` |
+| ▦ | Grid | `G` |
 | ⊞ | Compare | `C` |
 | 🟩 | Focus peaking | `P` |
 | 🔍 | Fit / 100% | `F` / `1` |
+| 🔒 | Keep zoom across photos | `L` |
 | ➕ | Zoom | `+` / `−` |
+| ❔ | All shortcuts | `?` |
+
+Holding a key down never sweeps through photos: a verdict needs a fresh press.
 
 Reject copies nothing — the source card stays exactly as it was. Accept copies
 the JPG (and optionally its ARW) to your destination.
+
+---
+
+## See the whole shoot at once
+
+Press **G** for a grid of every photo. Frames shot within two seconds of each
+other stack into one cell, so a 700-photo event reads as a few hundred moments.
+Select like in a file manager (click, `Shift`, `Ctrl`, arrows), then `A` keeps,
+`X` rejects and `0` clears the lot. `C` on a stack opens its frames side by
+side. Slow shutters are flagged on the tile, and **Copy** works from here at any
+point; undecided photos simply wait for the next session.
 
 ---
 
@@ -69,6 +85,8 @@ Shot the same frame four times? Hit **Compare**, pick the neighbours off the
 filmstrip, and inspect them side by side — each pane is a full zoom / pan /
 peaking inspector with its own EXIF, ARW toggle and rename. Keep the sharpest,
 drop the rest, all in one screen.
+With **Sync zoom** on, zooming or panning one frame moves all of them, so you
+check the same eyes in every shot.
 
 <!-- TODO screenshot: compare mode — 3–4 frames side by side, one zoomed
 <div align="center">
@@ -80,7 +98,7 @@ drop the rest, all in one screen.
 
 ## Never see the same photo twice
 
-fotocull identifies photos by **content, not name**. Each JPG's SHA-256 lives in
+fotocull identifies photos by **content, not name**. Each photo's SHA-256 lives in
 a hidden `.fotocull/manifest.json` in the destination.
 
 - Already copied? Hidden on the next scan — **even if you renamed it.**
@@ -98,15 +116,30 @@ a hidden `.fotocull/manifest.json` in the destination.
 </div>
 -->
 
-- **Zoom & pan** on a Canvas 2D stage — cursor-anchored wheel, drag to pan, Fit / 100%.
-- **Focus peaking** — a Sobel gradient overlay paints sharp edges green, so you
+- **Instant flipping**: each photo gets an upright 2560 px preview once, and the
+  neighbours sit decoded in memory, so the next photo is a redraw. The full
+  original is loaded only when you zoom past what the preview holds.
+- **Zoom & pan** on a Canvas 2D stage: cursor-anchored wheel, drag to pan, Fit / 100%.
+- **Focus peaking**: a Sobel gradient overlay paints sharp edges green, so you
   judge focus by eye. Off by default: no green on the photo while you read
   exposure and colour.
-- **Exposure readout** — clipped-highlight / crushed-shadow flags from the
+- **Exposure readout**: clipped-highlight / crushed-shadow flags from the
   luminance histogram.
-- **EXIF at a glance** — aperture, shutter, ISO, focal length and lens, per frame.
-- **Rename autocomplete** — names you've used before for this destination come
+- **EXIF at a glance**: aperture, shutter, ISO, focal length and lens, per frame.
+- **Rename autocomplete**: names you've used before for this destination come
   back as `Tab`-to-complete suggestions.
+  Characters a file name can't hold are swapped for `-`, so "Meeting 14/10"
+  is saved as `Meeting 14-10`.
+
+---
+
+## Learn from the shoot
+
+The scan screen ends with a **shoot report** built from the EXIF of every photo
+on the card: how many frames were slower than 1/60 s, whether the camera sat at
+its Auto ISO ceiling, which lenses were used stopped down, how much clipped.
+When a pattern shows up it says what to change in the camera before the next
+event, e.g. *raise the Auto ISO limit* or *open up the 35 mm*.
 
 ---
 
@@ -142,12 +175,19 @@ base name.
 
 Rust does the heavy lifting; nothing blocks the UI:
 
-- **Content dedup** — SHA-256 per JPG in a `.fotocull/manifest.json` container
-- **Parallel hashing** — `rayon` across every core (a card of ~400 RAW+JPG pairs)
-- **Atomic manifest** — temp-write + rename, so a crash mid-copy can't corrupt it
-- **Focus peaking** — Sobel gradient magnitude on a downscaled luma buffer
-- **EXIF** — `kamadak-exif`, straight off the JPG
-- **Read-only source** — the card is scanned, hashed and copied *from* — never written to
+- **Content dedup**: SHA-256 per photo (the JPG, or the ARW when there's no JPG) in a `.fotocull/manifest.json`
+- **One read per file**: hash and EXIF come from the same pass, and are cached
+  while a file's path, size and mtime don't change, so rescanning a card takes
+  a moment instead of re-reading every byte
+- **Folder-aware pairing**: a JPG and ARW pair only within one folder, so
+  reused file numbers (`100MSDCF` / `101MSDCF`) never get mixed up
+- **Verified copies**: each file is written under a temporary name, checked
+  against the source hash, then renamed; a failed ARW rolls its JPG back
+- **Atomic manifest**: temp-write, flush + rename, so a crash or a yanked drive can't corrupt it
+- **Previews**: DCT-scaled JPEG decode, SIMD resize, upright, cached in the app's cache folder
+- **Focus peaking**: Sobel gradient magnitude on a downscaled luma buffer
+- **EXIF**: `kamadak-exif`, straight off the JPG
+- **Read-only source**: the card is scanned, hashed and copied *from*, never written to
 
 Windows · macOS · Linux, all from one Tauri 2 codebase.
 
@@ -176,6 +216,7 @@ straight to GitHub Releases.
 - [x] Side-by-side compare
 - [x] Session resume + permanent reject skip-list
 - [x] Video (MP4) review tab
+- [x] Grid with burst stacks, cached previews, shoot report
 - [ ] Signed installers (SmartScreen / Gatekeeper clean)
 - [ ] Optional ARW-decoded preview
 
