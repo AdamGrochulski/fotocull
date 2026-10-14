@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 use crate::manifest::{load_manifest, save_manifest, ManifestEntry, VideoEntry};
+use crate::names::sanitize_name;
 
 /// One accepted photo to copy, sent from the frontend.
 #[derive(Deserialize)]
@@ -118,14 +119,11 @@ fn copy_one(
     manifest: &mut crate::manifest::Manifest,
     dest_dir: &str,
 ) -> Result<usize, String> {
-    // Renamed when a non-empty new name was given → goes to `unique/`.
-    let new_name = job
-        .new_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
+    // Renamed when a usable new name was given → goes to `unique/`. The name is
+    // sanitized here too, so nothing typed can leave the destination folder.
+    let new_name = job.new_name.as_deref().and_then(sanitize_name);
     let renamed = new_name.is_some();
-    let target_base = new_name.unwrap_or(&job.base_name);
+    let target_base = new_name.as_deref().unwrap_or(&job.base_name);
 
     let root = if renamed { dest.join("unique") } else { dest.to_path_buf() };
     let jpg_dir = root.join("jpg");
@@ -274,13 +272,9 @@ fn copy_one_video(
     manifest: &mut crate::manifest::Manifest,
     dest_dir: &str,
 ) -> Result<usize, String> {
-    let new_name = job
-        .new_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
+    let new_name = job.new_name.as_deref().and_then(sanitize_name);
     let renamed = new_name.is_some();
-    let target_base = new_name.unwrap_or(&job.base_name);
+    let target_base = new_name.as_deref().unwrap_or(&job.base_name);
 
     let dir = if renamed {
         dest.join("unique").join("video")

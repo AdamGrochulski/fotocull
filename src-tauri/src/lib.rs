@@ -4,6 +4,7 @@ mod exif;
 mod fs_ops;
 mod image;
 mod manifest;
+mod names;
 mod scan;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

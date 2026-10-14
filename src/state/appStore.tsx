@@ -26,6 +26,7 @@ import {
   type CopyReport,
 } from "../lib/copy";
 import { allowMediaDir } from "../lib/media";
+import { sanitizeName } from "../lib/names";
 import type { DirStatus, FolderRole } from "../types/fs";
 import type { Photo } from "../types/photo";
 import type { Video } from "../types/video";
@@ -523,7 +524,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     kind: DecisionKind,
     opts: { includeArw: boolean; newName: string },
   ) {
-    const newName = opts.newName.trim();
+    // Store the name the file will really get, so autocomplete offers it back.
+    const newName = sanitizeName(opts.newName);
     setDecisions((prev) => {
       const next = prev.slice();
       next[index] = { kind, includeArw: opts.includeArw, newName };
@@ -563,7 +565,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // --- video review ---
   function decideVideoCurrent(kind: DecisionKind, opts: { newName: string }) {
     const index = videoIndex;
-    const newName = opts.newName.trim();
+    const newName = sanitizeName(opts.newName);
     setVideoDecisions((prev) => {
       const next = prev.slice();
       next[index] = { kind, includeArw: false, newName };

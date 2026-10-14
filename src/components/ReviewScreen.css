@@ -421,6 +421,17 @@
 .review-rename__input {
   width: 100%;
 }
+/* Shown when the typed name will be saved differently (e.g. "14/10" → "14-10"). */
+.review-rename__hint {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 4px;
+  font-family: var(--fc-mono);
+  font-size: var(--fc-fs-xs);
+  color: var(--fc-warn);
+  white-space: nowrap;
+  pointer-events: none;
+}
 
 /* Autocomplete dropdown — floats above the controls below it. */
 .review-suggest {

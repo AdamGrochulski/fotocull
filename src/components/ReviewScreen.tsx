@@ -9,6 +9,7 @@ import { useAppState, COMPARE_MAX } from "../state/appStore";
 import { loadImageUrl, loadThumbnailUrl } from "../lib/image";
 import { analyzeImage, type ImageAnalysis } from "../lib/analyze";
 import { readExif, type ExifInfo } from "../lib/exif";
+import { sanitizeName } from "../lib/names";
 import { PhotoViewer, type PhotoViewerHandle } from "./PhotoViewer";
 import type { Photo } from "../types/photo";
 import "./ReviewScreen.css";
@@ -496,6 +497,10 @@ export function RenameField({
   }, [value, suggestions]);
 
   const showList = open && matches.length > 0;
+  // Characters a file name can't hold are replaced on save; say so up front.
+  const typed = value.trim();
+  const savedAs = sanitizeName(value);
+  const showSavedAs = !!typed && savedAs !== typed;
 
   function choose(name: string) {
     onChange(name);
@@ -566,6 +571,11 @@ export function RenameField({
         onBlur={() => setOpen(false)}
         onKeyDown={onKeyDown}
       />
+      {showSavedAs && (
+        <span className="review-rename__hint" aria-live="polite">
+          {savedAs ? `saved as “${savedAs}”` : "no usable name, original kept"}
+        </span>
+      )}
       {showList && (
         <ul className="review-suggest" role="listbox">
           {matches.map((name, i) => (
