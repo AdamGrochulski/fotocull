@@ -25,6 +25,7 @@ dist-ssr
 
 # --- Pliki dokumentacji (nie do repo publicznego) ---
 PLAN.md
+docs/
 
 # --- Tauri / Rust ---
 src-tauri/target/
