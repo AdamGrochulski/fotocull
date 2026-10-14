@@ -213,7 +213,7 @@ fn index_blocking(
             });
 
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-            if n % step == 0 || n == total {
+            if n.is_multiple_of(step) || n == total {
                 let _ = app.emit(
                     "index://progress",
                     IndexProgress { done: n, total, kind: kind.to_string() },

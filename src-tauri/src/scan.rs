@@ -250,7 +250,7 @@ fn scan_blocking(app: &AppHandle, root: &str) -> Result<ScanResult, String> {
         }
 
         // Report progress every 200 scanned files.
-        if files_scanned % 200 == 0 {
+        if files_scanned.is_multiple_of(200) {
             let _ = app.emit(
                 "scan://progress",
                 ScanProgress {
