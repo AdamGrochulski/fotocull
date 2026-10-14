@@ -420,13 +420,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   function startReview() {
-    // Restore accepted-but-not-copied decisions from a prior session, and start
-    // at the first photo still undecided (resume where you left off).
+    // Restore decisions from a prior session, and start at the first photo
+    // still undecided (resume where you left off). Earlier sessions' rejects
+    // never get here (the scan hides them), so any reject in `reviewed` was
+    // made in this session, e.g. before stepping back to the results screen.
     const seeded: (Decision | undefined)[] = photos.map((p) => {
       const r = p.hash ? reviewed[p.hash] : undefined;
-      return r?.kind === "accept"
-        ? { kind: "accept", includeArw: r.includeArw, newName: r.newName }
-        : undefined;
+      return r ? { kind: r.kind, includeArw: r.includeArw, newName: r.newName } : undefined;
     });
     const firstUndecided = seeded.findIndex((d) => d === undefined);
     setDecisions(seeded);

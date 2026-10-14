@@ -17,6 +17,19 @@ import "./ReviewScreen.css";
  * as the filmstrip window slides, so they're kept for the app's lifetime. */
 const thumbCache = new Map<string, string>();
 
+/** Keys that decide or move between photos: ignored while auto-repeating. */
+export const DECISION_KEYS = new Set([
+  "ArrowRight", "ArrowLeft", " ", "a", "A", "x", "X", "Delete",
+  "Backspace", "u", "U", "[", "]", "Enter",
+]);
+
+/** After a mouse click on Accept/Reject the button keeps focus, and the next
+ * Enter or Space would press it again on the following photo. Drop it. */
+export function releaseButtonFocus() {
+  const el = document.activeElement;
+  if (el instanceof HTMLButtonElement) el.blur();
+}
+
 export function ReviewScreen() {
   const { photos, reviewIndex, reviewMode } = useAppState();
 
@@ -113,9 +126,11 @@ function ReviewCard({ photo }: { photo: Photo }) {
   const viewerRef = useRef<PhotoViewerHandle>(null);
 
   function accept() {
+    releaseButtonFocus();
     decideCurrent("accept", { includeArw, newName });
   }
   function reject() {
+    releaseButtonFocus();
     decideCurrent("reject", { includeArw, newName });
   }
 
@@ -143,13 +158,24 @@ function ReviewCard({ photo }: { photo: Photo }) {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
       const v = viewerRef.current;
+      // A held key auto-repeats; for decisions that would sweep through a
+      // dozen photos in a second, so only the first press counts.
+      if (e.repeat && DECISION_KEYS.has(e.key)) {
+        e.preventDefault();
+        return;
+      }
       switch (e.key) {
         case "ArrowRight":
         case " ": // Space
+        case "a":
+        case "A":
           e.preventDefault();
           actions.current.accept();
           break;
         case "ArrowLeft":
+        case "x":
+        case "X":
+        case "Delete":
           e.preventDefault();
           actions.current.reject();
           break;
@@ -334,8 +360,8 @@ function ReviewCard({ photo }: { photo: Photo }) {
       )}
 
       <div className="review-keys" aria-hidden>
-        <span><kbd>←</kbd> reject</span>
-        <span><kbd>→</kbd>/<kbd>Space</kbd> accept</span>
+        <span><kbd>←</kbd>/<kbd>X</kbd> reject</span>
+        <span><kbd>→</kbd>/<kbd>A</kbd>/<kbd>Space</kbd> accept</span>
         <span><kbd>Backspace</kbd>/<kbd>U</kbd> undo</span>
         <span><kbd>R</kbd> ARW</span>
         <span><kbd>C</kbd> compare</span>
@@ -797,9 +823,11 @@ function CompareCell({ index }: { index: number }) {
 
   const decision = decisions[index];
   function accept() {
+    releaseButtonFocus();
     decideAt(index, "accept", { includeArw, newName });
   }
   function reject() {
+    releaseButtonFocus();
     decideAt(index, "reject", { includeArw, newName });
   }
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/appStore";
 import { videoSrc } from "../lib/media";
 import { openFolder } from "../lib/fs";
-import { RenameField } from "./ReviewScreen";
+import { DECISION_KEYS, RenameField, releaseButtonFocus } from "./ReviewScreen";
 import type { Video } from "../types/video";
 import "./VideoReviewScreen.css";
 
@@ -39,28 +39,50 @@ function VideoCard({ clip }: { clip: Video }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoIndex]);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   function accept() {
+    releaseButtonFocus();
     decideVideoCurrent("accept", { newName });
   }
   function reject() {
+    releaseButtonFocus();
     decideVideoCurrent("reject", { newName });
+  }
+  function togglePlay() {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) void v.play();
+    else v.pause();
   }
 
   // Latest handlers in a ref so the once-mounted key listener never goes stale.
-  const actions = useRef({ accept, reject, prev: () => {}, next: () => {} });
+  const actions = useRef({ accept, reject, togglePlay, prev: () => {}, next: () => {} });
   actions.current = {
     accept,
     reject,
+    togglePlay,
     prev: videoPrev,
     next: () => goToVideo(videoIndex + 1),
   };
 
-  // Keyboard: A/Enter accept, X/Delete reject, U/Backspace undo, [ ] navigate.
-  // Space and arrows are left to the focused <video> for play / scrub.
+  // Keyboard: A accept, X/Delete reject, U/Backspace undo, [ ] navigate, Space
+  // play/pause. Arrows are left to the focused <video> for scrubbing.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (e.repeat && DECISION_KEYS.has(e.key) && e.key !== " ") {
+        e.preventDefault();
+        return;
+      }
+      // A focused <video> handles Space itself; anywhere else Space would
+      // press whatever button was clicked last.
+      if (e.key === " " && el?.tagName !== "VIDEO") {
+        e.preventDefault();
+        if (!e.repeat) actions.current.togglePlay();
+        return;
+      }
       switch (e.key) {
         case "a":
         case "A":
@@ -133,6 +155,7 @@ function VideoCard({ clip }: { clip: Video }) {
         {/* key forces a fresh element per clip so the player resets cleanly. */}
         <video
           key={clip.path}
+          ref={videoRef}
           className="vreview-player"
           src={videoSrc(clip.path)}
           controls
